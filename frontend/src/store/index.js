@@ -8,6 +8,7 @@ export const useAuthStore = create((set, get) => ({
   isLoading: false,
   error: null,
 
+  // Normal login (not used in Telegram WebApp)
   login: async (authData) => {
     set({ isLoading: true, error: null });
     try {
@@ -29,6 +30,33 @@ export const useAuthStore = create((set, get) => ({
       const errorMessage = error.response?.data?.message || 'Login failed';
       set({ error: errorMessage, isLoading: false });
       throw error;
+    }
+  },
+
+  // ⭐ NEW: Auto-login using token from Telegram WebApp
+  loginWithToken: async (token) => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        const user = data.data.user;
+
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          error: null
+        });
+      }
+    } catch (err) {
+      console.error("Token login failed:", err);
     }
   },
 
@@ -59,39 +87,4 @@ export const useAuthStore = create((set, get) => ({
       console.error('Failed to refresh profile:', error);
     }
   },
-}));
-
-export const useGameStore = create((set) => ({
-  canPlay: false,
-  lastPlayed: null,
-  nextPlayTime: null,
-  gameSession: null,
-  isPlaying: false,
-  
-  setCanPlay: (canPlay, lastPlayed, nextPlayTime) => 
-    set({ canPlay, lastPlayed, nextPlayTime }),
-  
-  startSession: (sessionId) => 
-    set({ gameSession: sessionId, isPlaying: true }),
-  
-  endSession: () => 
-    set({ gameSession: null, isPlaying: false }),
-}));
-
-export const useLeaderboardStore = create((set) => ({
-  globalLeaderboard: [],
-  levelLeaderboards: {},
-  userRank: null,
-  stats: null,
-  
-  setGlobalLeaderboard: (data) => set({ globalLeaderboard: data }),
-  
-  setLevelLeaderboard: (level, data) => 
-    set((state) => ({
-      levelLeaderboards: { ...state.levelLeaderboards, [level]: data }
-    })),
-  
-  setUserRank: (rank) => set({ userRank: rank }),
-  
-  setStats: (stats) => set({ stats }),
 }));
