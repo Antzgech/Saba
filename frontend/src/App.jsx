@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store';
@@ -14,6 +14,17 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function App() {
+  const loginWithToken = useAuthStore(state => state.loginWithToken);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token) {
+      loginWithToken(token);
+    }
+  }, []);
+
   return (
     <Router>
       <div className="min-h-screen bg-dark-900">
