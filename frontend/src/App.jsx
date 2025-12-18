@@ -20,13 +20,14 @@ useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token");
 
-  console.log("Full URL:", window.location.href);
-  console.log("Token from URL:", token);
+  console.log("FULL URL:", window.location.href);
+  console.log("TOKEN:", token);
 
   if (token) {
     loginWithToken(token);
   }
 }, []);
+
 
 
   return (
