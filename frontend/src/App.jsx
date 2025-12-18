@@ -16,14 +16,18 @@ const ProtectedRoute = ({ children }) => {
 function App() {
   const loginWithToken = useAuthStore(state => state.loginWithToken);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
 
-    if (token) {
-      loginWithToken(token);
-    }
-  }, []);
+  console.log("Full URL:", window.location.href);
+  console.log("Token from URL:", token);
+
+  if (token) {
+    loginWithToken(token);
+  }
+}, []);
+
 
   return (
     <Router>
