@@ -22,6 +22,9 @@ const adminRoutes = require('./routes/admin');
 const app = express();
 const server = http.createServer(app);
 
+// ⭐ REQUIRED for Railway, Vercel, Render, Heroku, Nginx, Cloudflare
+app.set('trust proxy', 1);
+
 // Initialize Socket.IO for real-time leaderboard updates
 const io = socketIo(server, {
   cors: {
