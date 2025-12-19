@@ -20,15 +20,16 @@ const Login = () => {
       return;
     }
 
-   const data = {
+const data = {
   telegramId: user.id.toString(),
   username: user.username || "",
   firstName: user.first_name || "",
   lastName: user.last_name || "",
   photoUrl: user.photo_url || "",
-  authData: JSON.stringify(tg.initDataUnsafe),  // FIXED
+  authData: tg.initData,   // ✔ FIXED — raw signed string
   referralCode: new URLSearchParams(window.location.search).get("ref") || ""
 };
+
 
 
     await login(data);
