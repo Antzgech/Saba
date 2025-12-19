@@ -22,9 +22,10 @@ const Login = () => {
 
       // Auto-login if Telegram user data is available
       const initData = tg.initDataUnsafe;
-      if (initData?.user) {
-        handleTelegramLogin(initData.user);
-      }
+     if (initData?.user) {
+  handleTelegramLogin();
+}
+
     }
   }, []);
 
@@ -79,20 +80,12 @@ const Login = () => {
         </div>
 
         <button
-          onClick={() => {
-            if (window.Telegram?.WebApp) {
-              const tg = window.Telegram.WebApp;
-              if (tg.initDataUnsafe?.user) {
-                handleTelegramLogin(tg.initDataUnsafe.user);
-              }
-            } else {
-              alert('Please open this app from Telegram');
-            }
-          }}
-          className="btn-primary w-full text-lg"
-        >
-          Login with Telegram
-        </button>
+  onClick={handleTelegramLogin}
+  className="btn-primary w-full text-lg"
+>
+  Login with Telegram
+</button>
+
 
         <p className="text-sm text-gray-500 mt-6">
           Open this app from your Telegram bot to get started
