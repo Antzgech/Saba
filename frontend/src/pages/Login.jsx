@@ -7,49 +7,50 @@ const Login = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuthStore();
 
+  // -----------------------------
+  // FIX 1: Define this BEFORE useEffect
+  // -----------------------------
+  const handleTelegramLogin = async () => {
+    try {
+      const tg = window.Telegram.WebApp;
+
+      const data = {
+        initData: tg.initData,
+        initDataUnsafe: tg.initDataUnsafe,
+        query_id: tg.initDataUnsafe?.query_id,
+        user: tg.initDataUnsafe?.user,
+        auth_date: tg.initDataUnsafe?.auth_date,
+        hash: tg.initDataUnsafe?.hash,
+        referralCode: new URLSearchParams(window.location.search).get('ref') || ''
+      };
+
+      await login(data);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error("Login error:", error);
+    }
+  };
+
+  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard');
     }
   }, [isAuthenticated, navigate]);
 
+  // Telegram initialization + auto-login
   useEffect(() => {
-    // Initialize Telegram Web App
     if (window.Telegram?.WebApp) {
       const tg = window.Telegram.WebApp;
       tg.ready();
       tg.expand();
 
-      // Auto-login if Telegram user data is available
       const initData = tg.initDataUnsafe;
-     if (initData?.user) {
-  handleTelegramLogin();
-}
-
+      if (initData?.user) {
+        handleTelegramLogin();
+      }
     }
   }, []);
-
- const handleTelegramLogin = async () => {
-  try {
-    const tg = window.Telegram.WebApp;
-
-    const data = {
-      initData: tg.initData,                 // full signed string
-      initDataUnsafe: tg.initDataUnsafe,     // parsed object
-      query_id: tg.initDataUnsafe.query_id,
-      user: tg.initDataUnsafe.user,
-      auth_date: tg.initDataUnsafe.auth_date,
-      hash: tg.initDataUnsafe.hash,
-      referralCode: new URLSearchParams(window.location.search).get('ref') || ''
-    };
-
-    await login(data);
-    navigate('/dashboard');
-  } catch (error) {
-    console.error("Login error:", error);
-  }
-};
-
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -59,11 +60,11 @@ const Login = () => {
             <Trophy className="w-16 h-16 text-primary-500" />
           </div>
         </div>
-        
+
         <h1 className="text-5xl font-display font-bold mb-4 gradient-text">
           Telegram Rewards
         </h1>
-        
+
         <p className="text-xl text-gray-400 mb-8">
           Play games, earn points, and win real cash prizes!
         </p>
@@ -80,12 +81,11 @@ const Login = () => {
         </div>
 
         <button
-  onClick={handleTelegramLogin}
-  className="btn-primary w-full text-lg"
->
-  Login with Telegram
-</button>
-
+          onClick={handleTelegramLogin}
+          className="btn-primary w-full text-lg"
+        >
+          Login with Telegram
+        </button>
 
         <p className="text-sm text-gray-500 mt-6">
           Open this app from your Telegram bot to get started
