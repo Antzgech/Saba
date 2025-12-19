@@ -1,33 +1,7 @@
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const querystring = require('querystring');
+const { validate } = require('@telegram-apps/init-data-node');
 const { User } = require('../models');
-
-/**
- * Verify Telegram authentication data
- */
-const verifyTelegramAuth = (authData) => {
-  try {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const secretKey = crypto.createHash('sha256').update(botToken).digest();
-
-    const dataCheckString = Object.keys(authData)
-      .filter(key => key !== 'hash' && key !== 'signature')
-      .sort()
-      .map(key => `${key}=${authData[key]}`)
-      .join('\n');
-
-    const hash = crypto
-      .createHmac('sha256', secretKey)
-      .update(dataCheckString)
-      .digest('hex');
-
-    return hash === authData.hash;
-  } catch (error) {
-    console.error('Telegram auth verification error:', error);
-    return false;
-  }
-};
 
 /**
  * Generate JWT token
@@ -48,7 +22,6 @@ const generateToken = (userId) => {
 exports.telegramAuth = async (req, res) => {
   try {
     const { authData, referralCode } = req.body;
-console.log("RAW AUTH DATA RECEIVED:", authData);
 
     if (!authData) {
       return res.status(400).json({
@@ -63,9 +36,7 @@ console.log("RAW AUTH DATA RECEIVED:", authData);
     let parsedAuthData;
     try {
       parsedAuthData = querystring.parse(authData);
-console.log("PARSED AUTH DATA:", parsedAuthData);
 
-      // user is still a JSON string → parse it
       if (parsedAuthData.user) {
         parsedAuthData.user = JSON.parse(parsedAuthData.user);
       }
@@ -77,16 +48,16 @@ console.log("PARSED AUTH DATA:", parsedAuthData);
     }
 
     // ----------------------------------------------------
-    // 2. Verify Telegram signature (production only)
+    // 2. Verify Telegram WebApp signature
     // ----------------------------------------------------
-    if (process.env.NODE_ENV === "production") {
-      const isValid = verifyTelegramAuth(parsedAuthData);
-      if (!isValid) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid Telegram authentication"
-        });
-      }
+    try {
+      validate(authData, process.env.TELEGRAM_BOT_TOKEN);
+    } catch (e) {
+      console.error("Telegram WebApp signature verification failed:", e);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Telegram authentication"
+      });
     }
 
     const tgUser = parsedAuthData.user;
@@ -111,7 +82,7 @@ console.log("PARSED AUTH DATA:", parsedAuthData);
         firstName: tgUser.first_name || "",
         lastName: tgUser.last_name || "",
         photoUrl: tgUser.photo_url || "",
-        referralCode: `REF${tgUser.id}${crypto.randomBytes(3).toString('hex')}`,
+        referralCode: `REF${tgUser.id}${Math.random().toString(36).substring(2, 8)}`,
         totalPoints: 0,
         currentLevel: 1
       });
@@ -168,6 +139,7 @@ console.log("PARSED AUTH DATA:", parsedAuthData);
     });
   }
 };
+
 /**
  * @route   GET /api/auth/me
  * @desc    Return authenticated user's profile
@@ -196,7 +168,6 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-
 /**
  * @route   POST /api/auth/refresh
  * @desc    Refresh JWT token
@@ -221,7 +192,3 @@ exports.refreshToken = async (req, res) => {
     });
   }
 };
-
-
-   
-
