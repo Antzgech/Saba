@@ -32,15 +32,11 @@ const validate = (schema) => {
 // Validation schemas
 const schemas = {
   // Auth schemas
-  telegramAuth: Joi.object({
-    telegramId: Joi.string().required(),
-    username: Joi.string().allow('', null),
-    firstName: Joi.string().allow('', null),
-    lastName: Joi.string().allow('', null),
-    photoUrl: Joi.string().uri().allow('', null),
-    authData: Joi.string().required(),
-    referralCode: Joi.string().optional()
-  }),
+telegramAuth: Joi.object({
+  authData: Joi.string().required(),
+  referralCode: Joi.string().allow('', null)
+}),
+
   
   // Game schemas
   gameComplete: Joi.object({
