@@ -24,9 +24,10 @@ useEffect(() => {
   const token = params.get("token");
 
   if (token) {
-    loginWithToken(token);
+    loginWithToken(token); // your Zustand function
   }
 }, []);
+
 
 
 
