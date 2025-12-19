@@ -28,22 +28,27 @@ const Login = () => {
     }
   }, []);
 
-  const handleTelegramLogin = async (telegramUser) => {
-    try {
-      await login({
-        telegramId: telegramUser.id.toString(),
-        username: telegramUser.username || '',
-        firstName: telegramUser.first_name || '',
-        lastName: telegramUser.last_name || '',
-        photoUrl: telegramUser.photo_url || '',
-        authData: JSON.stringify(telegramUser),
-        referralCode: new URLSearchParams(window.location.search).get('ref') || ''
-      });
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('Login error:', error);
-    }
-  };
+ const handleTelegramLogin = async () => {
+  try {
+    const tg = window.Telegram.WebApp;
+
+    const data = {
+      initData: tg.initData,                 // full signed string
+      initDataUnsafe: tg.initDataUnsafe,     // parsed object
+      query_id: tg.initDataUnsafe.query_id,
+      user: tg.initDataUnsafe.user,
+      auth_date: tg.initDataUnsafe.auth_date,
+      hash: tg.initDataUnsafe.hash,
+      referralCode: new URLSearchParams(window.location.search).get('ref') || ''
+    };
+
+    await login(data);
+    navigate('/dashboard');
+  } catch (error) {
+    console.error("Login error:", error);
+  }
+};
+
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
