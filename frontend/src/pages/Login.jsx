@@ -10,26 +10,32 @@ const Login = () => {
   // -----------------------------
   // FIX 1: Define this BEFORE useEffect
   // -----------------------------
-  const handleTelegramLogin = async () => {
-    try {
-      const tg = window.Telegram.WebApp;
+ const handleTelegramLogin = async () => {
+  try {
+    const tg = window.Telegram.WebApp;
+    const user = tg.initDataUnsafe?.user;
 
-      const data = {
-        initData: tg.initData,
-        initDataUnsafe: tg.initDataUnsafe,
-        query_id: tg.initDataUnsafe?.query_id,
-        user: tg.initDataUnsafe?.user,
-        auth_date: tg.initDataUnsafe?.auth_date,
-        hash: tg.initDataUnsafe?.hash,
-        referralCode: new URLSearchParams(window.location.search).get('ref') || ''
-      };
-
-      await login(data);
-      navigate('/dashboard');
-    } catch (error) {
-      console.error("Login error:", error);
+    if (!user) {
+      console.error("No Telegram user data found");
+      return;
     }
-  };
+
+    const data = {
+      telegramId: user.id.toString(),
+      username: user.username || "",
+      firstName: user.first_name || "",
+      lastName: user.last_name || "",
+      photoUrl: user.photo_url || "",
+      authData: tg.initData, // raw signed string from Telegram
+      referralCode: new URLSearchParams(window.location.search).get("ref") || ""
+    };
+
+    await login(data);
+    navigate("/dashboard");
+  } catch (error) {
+    console.error("Login error:", error);
+  }
+};
 
   // Redirect if already authenticated
   useEffect(() => {
