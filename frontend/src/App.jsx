@@ -16,38 +16,56 @@ const ProtectedRoute = ({ children }) => {
 function App() {
   const loginWithToken = useAuthStore(state => state.loginWithToken);
 
-useEffect(() => {
-  console.log("FRONTEND URL:", window.location.href);
-  console.log("TOKEN IN FRONTEND:", new URLSearchParams(window.location.search).get("token"));
+  useEffect(() => {
+    // Wait for Telegram WebApp to fully initialize
+    setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
 
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("token");
+      console.log("FRONTEND URL:", window.location.href);
+      console.log("TOKEN IN FRONTEND:", token);
 
-  if (token) {
-    loginWithToken(token); // your Zustand function
-  }
-}, []);
-
-
-
-
+      if (token) {
+        loginWithToken(token);
+      }
+    }, 300); // delay ensures Telegram injects the URL
+  }, [loginWithToken]);
 
   return (
     <Router>
       <div className="min-h-screen bg-dark-900">
         <Toaster position="top-right" />
         <Navbar />
+
         <Routes>
           <Route path="/" element={<Login />} />
-          <Route path="/dashboard" element={
-            <ProtectedRoute><Dashboard /></ProtectedRoute>
-          } />
-          <Route path="/game" element={
-            <ProtectedRoute><Game /></ProtectedRoute>
-          } />
-          <Route path="/leaderboard" element={
-            <ProtectedRoute><Leaderboard /></ProtectedRoute>
-          } />
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/game"
+            element={
+              <ProtectedRoute>
+                <Game />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/leaderboard"
+            element={
+              <ProtectedRoute>
+                <Leaderboard />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </div>
     </Router>
