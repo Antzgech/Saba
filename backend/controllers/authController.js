@@ -166,3 +166,57 @@ exports.telegramAuth = async (req, res) => {
     });
   }
 };
+/**
+ * @route   GET /api/auth/me
+ * @desc    Return authenticated user's profile
+ * @access  Private
+ */
+exports.getProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { user }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch profile"
+    });
+  }
+};
+
+
+/**
+ * @route   POST /api/auth/refresh
+ * @desc    Refresh JWT token
+ * @access  Private
+ */
+exports.refreshToken = async (req, res) => {
+  try {
+    const newToken = jwt.sign(
+      { id: req.user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+    );
+
+    res.json({
+      success: true,
+      data: { token: newToken }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to refresh token"
+    });
+  }
+};
+
