@@ -52,9 +52,15 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: [
+    "https://saba-hbhv.vercel.app",   // your Vercel frontend
+    "https://t.me",                   // Telegram WebApp
+    "https://web.telegram.org",       // Telegram Web
+    "https://telegram.org"            // fallback
+  ],
   credentials: true
 }));
+
 
 // Rate limiting
 const limiter = rateLimit({
