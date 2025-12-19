@@ -140,15 +140,16 @@ const startServer = async () => {
     }
     
     // Start server
-    server.listen(PORT, () => {
-      console.log('=================================');
-      console.log('🚀 Telegram Rewards API Server');
-      console.log('=================================');
-      console.log(`Environment: ${process.env.NODE_ENV}`);
-      console.log(`Server: http://localhost:${PORT}`);
-      console.log(`Health: http://localhost:${PORT}/health`);
-      console.log('=================================\n');
-    });
+    server.listen(PORT, "0.0.0.0", () => {
+  console.log('=================================');
+  console.log('🚀 Telegram Rewards API Server');
+  console.log('=================================');
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Health: /health`);
+  console.log('=================================\n');
+});
+
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
