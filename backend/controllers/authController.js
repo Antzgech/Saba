@@ -12,7 +12,7 @@ const verifyTelegramAuth = (authData) => {
     const secretKey = crypto.createHash('sha256').update(botToken).digest();
 
     const dataCheckString = Object.keys(authData)
-      .filter(key => key !== 'hash')
+      .filter(key => key !== 'hash' && key !== 'signature')
       .sort()
       .map(key => `${key}=${authData[key]}`)
       .join('\n');
