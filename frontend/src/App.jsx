@@ -17,16 +17,17 @@ function App() {
   const loginWithToken = useAuthStore(state => state.loginWithToken);
 
 useEffect(() => {
+  console.log("FRONTEND URL:", window.location.href);
+  console.log("TOKEN IN FRONTEND:", new URLSearchParams(window.location.search).get("token"));
+
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token");
-
-  console.log("FULL URL:", window.location.href);
-  console.log("TOKEN:", token);
 
   if (token) {
     loginWithToken(token);
   }
 }, []);
+
 
 
 
