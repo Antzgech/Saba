@@ -1,226 +1,343 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../store';
 import { gameAPI, leaderboardAPI } from '../services/api';
-import { Trophy, Users, Gift, TrendingUp } from 'lucide-react';
+import { Crown, Zap, TrendingUp, Users, Gift, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const Dashboard = () => {
-  const { user } = useAuthStore();
-  const [canPlay, setCanPlay] = useState(false);
-  const [stats, setStats] = useState(null);
+  const { user, updateUser } = useAuthStore();
+  const [tapCount, setTapCount] = useState(0);
+  const [energy, setEnergy] = useState(1000);
+  const [maxEnergy] = useState(1000);
+  const [pointsPerTap] = useState(1);
+  const [showFloatingPoints, setShowFloatingPoints] = useState([]);
   const [userRank, setUserRank] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [queenPosition, setQueenPosition] = useState({ x: 50, y: 50 });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [playStatus, gameStats, rankData] = await Promise.all([
-          gameAPI.canPlay(),
-          gameAPI.getStats(),
+        const [rankData, gameStats] = await Promise.all([
           leaderboardAPI.getUserRank(),
+          gameAPI.getStats(),
         ]);
-
-        setCanPlay(playStatus.data.data.canPlay);
-        setStats(gameStats.data.data);
         setUserRank(rankData.data.data);
+        setStats(gameStats.data.data);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       }
     };
-
     fetchData();
-  }, []);
 
-  const displayName = user?.firstName || user?.username || 'Fighter';
+    // Energy regeneration (1 per second)
+    const energyInterval = setInterval(() => {
+      setEnergy(prev => Math.min(prev + 1, maxEnergy));
+    }, 1000);
+
+    return () => clearInterval(energyInterval);
+  }, [maxEnergy]);
+
+  const handleTap = (e) => {
+    if (energy < pointsPerTap) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Add points
+    const newPoints = user.totalPoints + pointsPerTap;
+    updateUser({ totalPoints: newPoints });
+    setTapCount(prev => prev + 1);
+    setEnergy(prev => Math.max(0, prev - pointsPerTap));
+
+    // Floating point animation
+    const id = Date.now();
+    setShowFloatingPoints(prev => [...prev, { id, x, y, points: pointsPerTap }]);
+    setTimeout(() => {
+      setShowFloatingPoints(prev => prev.filter(p => p.id !== id));
+    }, 1000);
+
+    // Move queen slightly
+    setQueenPosition({
+      x: 50 + (Math.random() - 0.5) * 10,
+      y: 50 + (Math.random() - 0.5) * 10
+    });
+  };
+
+  const energyPercentage = (energy / maxEnergy) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-black via-[#120000] to-[#1b0b0b] text-white px-4 py-8">
-      {/* Arena glow styles */}
-      <style>{`
-        .arena-title {
-          letter-spacing: 6px;
-          text-shadow:
-            0 0 8px rgba(255,80,0,0.9),
-            0 0 24px rgba(255,40,0,0.6),
-            0 6px 30px rgba(0,0,0,0.8);
-        }
-        .glow-card {
-          background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-          border: 1px solid rgba(255,80,0,0.12);
-          box-shadow: 0 8px 30px rgba(255,40,0,0.06), inset 0 -6px 20px rgba(0,0,0,0.6);
-          backdrop-filter: blur(6px);
-        }
-        .pulse {
-          animation: pulseGlow 2.2s infinite;
-        }
-        @keyframes pulseGlow {
-          0% { box-shadow: 0 0 8px rgba(255,80,0,0.12); transform: translateY(0); }
-          50% { box-shadow: 0 0 28px rgba(255,120,0,0.18); transform: translateY(-3px); }
-          100% { box-shadow: 0 0 8px rgba(255,80,0,0.12); transform: translateY(0); }
-        }
-        .arena-bg {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          background-image: radial-gradient(circle at 20% 10%, rgba(255,40,0,0.06), transparent 8%),
-                            radial-gradient(circle at 80% 90%, rgba(255,120,0,0.03), transparent 12%);
-          pointer-events: none;
-        }
-      `}</style>
-
-      <div className="relative max-w-7xl mx-auto z-10">
-        <div className="arena-bg" />
-
-        {/* Header */}
-        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-extrabold arena-title">
-              ARENA REWARDS
-            </h1>
-            <p className="text-sm text-gray-300 mt-2">
-              Welcome, <span className="text-yellow-300 font-semibold">{displayName}</span> — enter the arena and fight for the top.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="glow-card rounded-xl p-4 flex items-center gap-4">
-              <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[#2b0000] to-[#3a0a0a] flex items-center justify-center border border-red-700/20">
-                <img
-                  src={user?.photoUrl || '/avatar-placeholder.png'}
-                  alt="avatar"
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-              </div>
-              <div className="text-left">
-                <div className="text-xs text-gray-300">Fighter</div>
-                <div className="text-lg font-bold">{displayName}</div>
-                <div className="text-xs text-yellow-300">#{userRank?.rank || '-'}</div>
-              </div>
-            </div>
-
-            <div className="glow-card rounded-xl p-4 text-center w-36 pulse">
-              <div className="text-xs text-gray-300">Points</div>
-              <div className="text-2xl font-extrabold text-yellow-300">{user?.totalPoints || 0}</div>
-            </div>
-          </div>
-        </header>
-
-        {/* Stat cards */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 relative z-10">
-          <div className="glow-card rounded-2xl p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#2a0b00] rounded-xl border border-red-700/10">
-                <Trophy className="w-6 h-6 text-yellow-300" />
-              </div>
-              <div>
-                <div className="text-xs text-gray-300">Total Points</div>
-                <div className="text-2xl font-bold">{user?.totalPoints || 0}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="glow-card rounded-2xl p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#001a2a] rounded-xl border border-blue-700/10">
-                <TrendingUp className="w-6 h-6 text-blue-300" />
-              </div>
-              <div>
-                <div className="text-xs text-gray-300">Current Level</div>
-                <div className="text-2xl font-bold">Level {user?.currentLevel || 1}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="glow-card rounded-2xl p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#002a1a] rounded-xl border border-green-700/10">
-                <Users className="w-6 h-6 text-green-300" />
-              </div>
-              <div>
-                <div className="text-xs text-gray-300">Rank</div>
-                <div className="text-2xl font-bold">#{userRank?.rank || '-'}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="glow-card rounded-2xl p-5">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-[#2a003a] rounded-xl border border-purple-700/10">
-                <Gift className="w-6 h-6 text-purple-300" />
-              </div>
-              <div>
-                <div className="text-xs text-gray-300">Referrals</div>
-                <div className="text-2xl font-bold">{user?.referralCount || 0}</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Main content */}
-        <main className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Arena Panel */}
-          <div className="lg:col-span-2 glow-card rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Daily Challenge</h2>
-              <div className="text-sm text-gray-300">Win points, climb the ranks</div>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-6 items-center">
-              <div className="flex-1">
-                <p className="text-gray-300 mb-4">
-                  Enter the arena and play the daily game. Each win grants points and increases your chance to be in the top 10.
-                </p>
-
-                {canPlay ? (
-                  <Link to="/game" className="inline-block bg-gradient-to-r from-red-500 to-yellow-400 text-black font-bold px-6 py-3 rounded-lg shadow-lg">
-                    ENTER ARENA
-                  </Link>
-                ) : (
-                  <div className="text-yellow-300 font-semibold">Come back tomorrow to play again!</div>
-                )}
-              </div>
-
-              <div className="w-48 h-48 rounded-xl bg-gradient-to-br from-[#2b0000] to-[#3a0a0a] flex items-center justify-center border border-red-700/20">
-                <div className="text-center">
-                  <div className="text-xs text-gray-300">Win Streak</div>
-                  <div className="text-3xl font-extrabold text-yellow-300">{stats?.winStreak || 0}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick actions / leaderboard snapshot */}
-          <aside className="glow-card rounded-3xl p-6">
-            <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
-
-            <div className="flex flex-col gap-3 mb-6">
-              <Link to="/social" className="block text-center py-2 rounded-md bg-[#111] border border-red-700/10">Complete Social Tasks</Link>
-              <Link to="/referrals" className="block text-center py-2 rounded-md bg-[#111] border border-red-700/10">Invite Friends</Link>
-              <Link to="/leaderboard" className="block text-center py-2 rounded-md bg-[#111] border border-red-700/10">View Leaderboard</Link>
-            </div>
-
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 pb-20">
+      {/* Header Stats */}
+      <div className="bg-black/30 backdrop-blur-sm border-b border-purple-500/20">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
             <div>
-              <h4 className="text-sm text-gray-300 mb-2">Leaderboard Snapshot</h4>
-              <div className="space-y-2">
-                {stats?.top3?.length ? (
-                  stats.top3.map((p, i) => (
-                    <div key={p.id || i} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-xs">{i + 1}</div>
-                        <div>
-                          <div className="font-semibold">{p.firstName || p.username}</div>
-                          <div className="text-xs text-gray-400">#{p.rank}</div>
-                        </div>
-                      </div>
-                      <div className="text-yellow-300 font-bold">{p.totalPoints}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-gray-400 text-sm">Leaderboard loading...</div>
-                )}
+              <div className="text-xs text-purple-300 mb-1">Your Kingdom</div>
+              <div className="text-2xl font-bold text-white flex items-center gap-2">
+                <Crown className="w-6 h-6 text-yellow-400" />
+                {user?.firstName || user?.username}
               </div>
             </div>
-          </aside>
-        </main>
+            <div className="text-right">
+              <div className="text-xs text-purple-300 mb-1">Rank</div>
+              <div className="text-2xl font-bold text-yellow-400">
+                #{userRank?.rank || '-'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Points Display */}
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center mb-6"
+        >
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full px-8 py-4 shadow-2xl border-4 border-yellow-300/50">
+            <Crown className="w-10 h-10 text-white animate-pulse" />
+            <div>
+              <div className="text-sm text-yellow-100 font-semibold">Journey to King Solomon</div>
+              <div className="text-4xl font-black text-white">
+                {(user?.totalPoints || 0).toLocaleString()}
+              </div>
+            </div>
+            <Sparkles className="w-10 h-10 text-white animate-pulse" />
+          </div>
+        </motion.div>
+
+        {/* Queen Tap Area */}
+        <div className="relative mb-6">
+          <div className="bg-gradient-to-b from-purple-800/40 to-blue-900/40 rounded-3xl border-4 border-purple-400/30 p-8 backdrop-blur-sm shadow-2xl overflow-hidden">
+            {/* Decorative Background */}
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,_rgba(255,215,0,0.1)_0%,_transparent_50%)]"></div>
+            </div>
+
+            {/* Tap Instruction */}
+            <motion.div 
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="text-center mb-4"
+            >
+              <div className="text-yellow-300 font-bold text-lg mb-1 flex items-center justify-center gap-2">
+                <Sparkles className="w-5 h-5" />
+                Tap the Queen to Journey to Solomon!
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="text-purple-300 text-sm">
+                Each tap brings you closer to the wise king
+              </div>
+            </motion.div>
+
+            {/* Queen Character */}
+            <div className="relative h-[400px] flex items-center justify-center">
+              <motion.div
+                onClick={handleTap}
+                animate={{
+                  x: queenPosition.x - 50 + '%',
+                  y: queenPosition.y - 50 + '%',
+                }}
+                whileTap={{ scale: 0.95 }}
+                className="relative cursor-pointer select-none"
+                style={{ width: '280px', height: '280px' }}
+              >
+                {/* Queen Character Circle */}
+                <motion.div
+                  animate={{
+                    boxShadow: [
+                      '0 0 40px rgba(251, 191, 36, 0.5)',
+                      '0 0 80px rgba(251, 191, 36, 0.8)',
+                      '0 0 40px rgba(251, 191, 36, 0.5)',
+                    ],
+                  }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="w-full h-full rounded-full bg-gradient-to-br from-pink-400 via-purple-500 to-indigo-600 flex items-center justify-center border-8 border-yellow-300/50 shadow-2xl"
+                >
+                  <div className="text-center">
+                    <div className="text-8xl mb-2">👸</div>
+                    <div className="text-white font-bold text-xl bg-black/30 rounded-full px-4 py-1">
+                      QUEEN
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Floating Points */}
+                <AnimatePresence>
+                  {showFloatingPoints.map(point => (
+                    <motion.div
+                      key={point.id}
+                      initial={{ opacity: 1, y: 0, scale: 1 }}
+                      animate={{ opacity: 0, y: -100, scale: 1.5 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 1 }}
+                      className="absolute text-3xl font-black text-yellow-300"
+                      style={{
+                        left: point.x - 20,
+                        top: point.y - 20,
+                        textShadow: '0 0 10px rgba(0,0,0,0.8)',
+                      }}
+                    >
+                      +{point.points}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            </div>
+
+            {/* Destination Indicator */}
+            <div className="text-center mt-4">
+              <div className="inline-flex items-center gap-2 bg-black/40 rounded-full px-6 py-2 border border-yellow-400/30">
+                <span className="text-purple-300 text-sm">Destination:</span>
+                <Crown className="w-5 h-5 text-yellow-400" />
+                <span className="text-yellow-300 font-bold">King Solomon's Palace</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Energy Bar */}
+          <div className="mt-4 bg-black/40 rounded-2xl p-4 backdrop-blur-sm border border-purple-500/30">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-yellow-400" />
+                <span className="text-white font-semibold">Royal Energy</span>
+              </div>
+              <span className="text-purple-300 font-bold">
+                {energy} / {maxEnergy}
+              </span>
+            </div>
+            <div className="relative h-6 bg-purple-900/50 rounded-full overflow-hidden border-2 border-purple-500/30">
+              <motion.div
+                animate={{ width: `${energyPercentage}%` }}
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-400 rounded-full"
+                style={{
+                  boxShadow: '0 0 20px rgba(251, 191, 36, 0.5)',
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
+            </div>
+            <div className="text-xs text-purple-300 mt-1 text-center">
+              +1 energy per second
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gradient-to-br from-purple-600/30 to-blue-600/30 rounded-2xl p-4 border border-purple-400/20 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <Crown className="w-5 h-5 text-yellow-400" />
+              <span className="text-purple-300 text-sm">Level</span>
+            </div>
+            <div className="text-3xl font-black text-white">{user?.currentLevel || 1}</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-pink-600/30 to-purple-600/30 rounded-2xl p-4 border border-pink-400/20 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-5 h-5 text-pink-400" />
+              <span className="text-purple-300 text-sm">Taps</span>
+            </div>
+            <div className="text-3xl font-black text-white">{tapCount}</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-blue-600/30 to-cyan-600/30 rounded-2xl p-4 border border-blue-400/20 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="w-5 h-5 text-cyan-400" />
+              <span className="text-purple-300 text-sm">Referrals</span>
+            </div>
+            <div className="text-3xl font-black text-white">{user?.referralCount || 0}</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-orange-600/30 to-yellow-600/30 rounded-2xl p-4 border border-orange-400/20 backdrop-blur-sm">
+            <div className="flex items-center gap-2 mb-2">
+              <Gift className="w-5 h-5 text-orange-400" />
+              <span className="text-purple-300 text-sm">Games</span>
+            </div>
+            <div className="text-3xl font-black text-white">{stats?.totalGames || 0}</div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Link
+            to="/game"
+            className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg transform hover:scale-105 transition-all text-center border-4 border-yellow-300/50"
+          >
+            <div className="text-2xl mb-1">🎮</div>
+            <div>Play Daily Game</div>
+          </Link>
+
+          <Link
+            to="/social"
+            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg transform hover:scale-105 transition-all text-center border-4 border-purple-300/50"
+          >
+            <div className="text-2xl mb-1">✨</div>
+            <div>Social Quests</div>
+          </Link>
+
+          <Link
+            to="/referrals"
+            className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg transform hover:scale-105 transition-all text-center border-4 border-blue-300/50"
+          >
+            <div className="text-2xl mb-1">👥</div>
+            <div>Invite Friends</div>
+          </Link>
+        </div>
+
+        {/* Progress to Next Level */}
+        {user?.currentLevel < 3 && (
+          <div className="mt-6 bg-black/40 rounded-2xl p-6 backdrop-blur-sm border border-purple-500/30">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-purple-300 font-semibold">Journey to Next Level</span>
+              <span className="text-white font-bold">
+                {user?.totalPoints || 0} / {user?.currentLevel === 1 ? 1000 : 5000}
+              </span>
+            </div>
+            <div className="relative h-4 bg-purple-900/50 rounded-full overflow-hidden border-2 border-purple-500/30">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{
+                  width: `${Math.min(
+                    100,
+                    ((user?.totalPoints || 0) /
+                      (user?.currentLevel === 1 ? 1000 : 5000)) *
+                      100
+                  )}%`,
+                }}
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 rounded-full"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-lg border-t border-purple-500/30">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-around">
+            <Link to="/dashboard" className="flex flex-col items-center gap-1 text-yellow-400">
+              <Crown className="w-6 h-6" />
+              <span className="text-xs font-semibold">Home</span>
+            </Link>
+            <Link to="/game" className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-100">
+              <Sparkles className="w-6 h-6" />
+              <span className="text-xs font-semibold">Play</span>
+            </Link>
+            <Link to="/leaderboard" className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-100">
+              <TrendingUp className="w-6 h-6" />
+              <span className="text-xs font-semibold">Leaders</span>
+            </Link>
+            <Link to="/referrals" className="flex flex-col items-center gap-1 text-purple-300 hover:text-purple-100">
+              <Gift className="w-6 h-6" />
+              <span className="text-xs font-semibold">Earn</span>
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );
