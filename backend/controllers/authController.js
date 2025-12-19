@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { User } = require('../models');
+const querystring = require('querystring');
 
 /**
  * Verify Telegram authentication data
@@ -57,15 +58,24 @@ exports.telegramAuth = async (req, res) => {
     const { telegramId, username, firstName, lastName, photoUrl, authData, referralCode } = req.body;
     
     // Parse and verify Telegram auth data
-    let parsedAuthData;
-    try {
-      parsedAuthData = JSON.parse(authData);
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid authentication data format'
-      });
-    }
+   // Parse Telegram initData (query string format)
+let parsedAuthData;
+try {
+  const parsed = querystring.parse(authData);
+
+  // user is still a JSON string inside the query string
+  if (parsed.user) {
+    parsed.user = JSON.parse(parsed.user);
+  }
+
+  parsedAuthData = parsed;
+} catch (error) {
+  return res.status(400).json({
+    success: false,
+    message: 'Invalid authentication data format'
+  });
+}
+
     
     // Verify Telegram authentication (in production, always verify)
     if (process.env.NODE_ENV === 'production') {
