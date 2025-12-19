@@ -20,15 +20,16 @@ const Login = () => {
       return;
     }
 
-    const data = {
-      telegramId: user.id.toString(),
-      username: user.username || "",
-      firstName: user.first_name || "",
-      lastName: user.last_name || "",
-      photoUrl: user.photo_url || "",
-      authData: tg.initData, // raw signed string from Telegram
-      referralCode: new URLSearchParams(window.location.search).get("ref") || ""
-    };
+   const data = {
+  telegramId: user.id.toString(),
+  username: user.username || "",
+  firstName: user.first_name || "",
+  lastName: user.last_name || "",
+  photoUrl: user.photo_url || "",
+  authData: JSON.stringify(tg.initDataUnsafe),  // FIXED
+  referralCode: new URLSearchParams(window.location.search).get("ref") || ""
+};
+
 
     await login(data);
     navigate("/dashboard");
