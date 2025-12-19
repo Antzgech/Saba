@@ -48,7 +48,7 @@ exports.telegramAuth = async (req, res) => {
     }
 
     // ----------------------------------------------------
-    // 2. Verify Telegram WebApp signature
+    // 2. Verify Telegram WebApp signature (correct method)
     // ----------------------------------------------------
     try {
       validate(authData, process.env.TELEGRAM_BOT_TOKEN);
