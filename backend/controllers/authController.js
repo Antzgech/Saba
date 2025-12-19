@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { User } = require('../models');
 const querystring = require('querystring');
+const { User } = require('../models');
 
 /**
  * Verify Telegram authentication data
@@ -10,31 +10,23 @@ const verifyTelegramAuth = (authData) => {
   try {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const secretKey = crypto.createHash('sha256').update(botToken).digest();
-    
+
     const dataCheckString = Object.keys(authData)
       .filter(key => key !== 'hash')
       .sort()
       .map(key => `${key}=${authData[key]}`)
       .join('\n');
-    
+
     const hash = crypto
       .createHmac('sha256', secretKey)
       .update(dataCheckString)
       .digest('hex');
-    
+
     return hash === authData.hash;
   } catch (error) {
     console.error('Telegram auth verification error:', error);
     return false;
   }
-};
-
-/**
- * Generate unique referral code
- */
-const generateReferralCode = (telegramId) => {
-  const random = crypto.randomBytes(4).toString('hex');
-  return `REF${telegramId}${random}`.toUpperCase();
 };
 
 /**
@@ -50,94 +42,103 @@ const generateToken = (userId) => {
 
 /**
  * @route   POST /api/auth/telegram
- * @desc    Authenticate user via Telegram
+ * @desc    Authenticate user via Telegram WebApp
  * @access  Public
  */
 exports.telegramAuth = async (req, res) => {
   try {
-    const { telegramId, username, firstName, lastName, photoUrl, authData, referralCode } = req.body;
-    
-    // Parse and verify Telegram auth data
-   // Parse Telegram initData (query string format)
-let parsedAuthData;
-try {
-  const parsed = querystring.parse(authData);
+    const { authData, referralCode } = req.body;
 
-  // user is still a JSON string inside the query string
-  if (parsed.user) {
-    parsed.user = JSON.parse(parsed.user);
-  }
+    if (!authData) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing Telegram authentication data"
+      });
+    }
 
-  parsedAuthData = parsed;
-} catch (error) {
-  return res.status(400).json({
-    success: false,
-    message: 'Invalid authentication data format'
-  });
-}
+    // ----------------------------------------------------
+    // 1. Parse Telegram initData (query string format)
+    // ----------------------------------------------------
+    let parsedAuthData;
+    try {
+      parsedAuthData = querystring.parse(authData);
 
-    
-    // Verify Telegram authentication (in production, always verify)
-    if (process.env.NODE_ENV === 'production') {
+      // user is still a JSON string → parse it
+      if (parsedAuthData.user) {
+        parsedAuthData.user = JSON.parse(parsedAuthData.user);
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid authentication data format"
+      });
+    }
+
+    // ----------------------------------------------------
+    // 2. Verify Telegram signature (production only)
+    // ----------------------------------------------------
+    if (process.env.NODE_ENV === "production") {
       const isValid = verifyTelegramAuth(parsedAuthData);
       if (!isValid) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid Telegram authentication'
+          message: "Invalid Telegram authentication"
         });
       }
     }
-    
-    // Check if user exists
-    let user = await User.findOne({ where: { telegramId } });
-    
+
+    const tgUser = parsedAuthData.user;
+
+    // ----------------------------------------------------
+    // 3. Find or create user
+    // ----------------------------------------------------
+    let user = await User.findOne({ where: { telegramId: tgUser.id } });
+
     if (user) {
-      // Update existing user info
-      user.username = username || user.username;
-      user.firstName = firstName || user.firstName;
-      user.lastName = lastName || user.lastName;
-      user.photoUrl = photoUrl || user.photoUrl;
+      // Update existing user
+      user.username = tgUser.username || user.username;
+      user.firstName = tgUser.first_name || user.firstName;
+      user.lastName = tgUser.last_name || user.lastName;
+      user.photoUrl = tgUser.photo_url || user.photoUrl;
       await user.save();
     } else {
       // Create new user
-      const newReferralCode = generateReferralCode(telegramId);
-      
       user = await User.create({
-        telegramId,
-        username,
-        firstName,
-        lastName,
-        photoUrl,
-        referralCode: newReferralCode,
+        telegramId: tgUser.id,
+        username: tgUser.username || "",
+        firstName: tgUser.first_name || "",
+        lastName: tgUser.last_name || "",
+        photoUrl: tgUser.photo_url || "",
+        referralCode: `REF${tgUser.id}${crypto.randomBytes(3).toString('hex')}`,
         totalPoints: 0,
         currentLevel: 1
       });
-      
-      // Handle referral if provided
+
+      // Handle referral
       if (referralCode) {
         const referrer = await User.findOne({ where: { referralCode } });
-        
         if (referrer) {
           user.referredBy = referrer.id;
           await user.save();
-          
-          // Award points to referrer
-          await referrer.addPoints(500, 'REFERRAL_BONUS');
+
           referrer.referralCount += 1;
+          await referrer.addPoints(500, "REFERRAL_BONUS");
           await referrer.save();
         }
       }
-      
-      // Give welcome bonus
-      await user.addPoints(100, 'WELCOME_BONUS');
+
+      // Welcome bonus
+      await user.addPoints(100, "WELCOME_BONUS");
     }
-    
-    // Generate JWT token
+
+    // ----------------------------------------------------
+    // 4. Generate JWT
+    // ----------------------------------------------------
     const token = generateToken(user.id);
-    
+
     res.json({
       success: true,
-      message: user.createdAt === user.updatedAt ? 'User registered successfully' : 'User logged in successfully',
+      message: "Authenticated successfully",
       data: {
         token,
         user: {
@@ -155,57 +156,12 @@ try {
         }
       }
     });
-  } catch (error) {
-    console.error('Telegram auth error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Authentication failed',
-      error: error.message
-    });
-  }
-};
 
-/**
- * @route   GET /api/auth/me
- * @desc    Get current user profile
- * @access  Private
- */
-exports.getProfile = async (req, res) => {
-  try {
-    const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['createdAt', 'updatedAt'] }
-    });
-    
-    res.json({
-      success: true,
-      data: { user }
-    });
   } catch (error) {
+    console.error("Telegram auth error:", error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching profile',
-      error: error.message
-    });
-  }
-};
-
-/**
- * @route   POST /api/auth/refresh
- * @desc    Refresh JWT token
- * @access  Private
- */
-exports.refreshToken = async (req, res) => {
-  try {
-    const newToken = generateToken(req.user.id);
-    
-    res.json({
-      success: true,
-      data: { token: newToken }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error refreshing token',
+      message: "Authentication failed",
       error: error.message
     });
   }
