@@ -221,32 +221,7 @@ exports.refreshToken = async (req, res) => {
     });
   }
 };
-exports.telegramAuth = async (req, res) => {
-  try {
-    const { authData, referralCode } = req.body;
 
-    console.log("RAW AUTH DATA RECEIVED:", authData);   // 🔥 TEMP LOG
 
-    if (!authData) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing Telegram authentication data"
-      });
-    }
-
-    let parsedAuthData;
-    try {
-      parsedAuthData = querystring.parse(authData);
-
-      console.log("PARSED AUTH DATA:", parsedAuthData); // 🔥 TEMP LOG
-
-      if (parsedAuthData.user) {
-        parsedAuthData.user = JSON.parse(parsedAuthData.user);
-      }
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid authentication data format"
-      });
-    }
+   
 
