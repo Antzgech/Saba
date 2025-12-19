@@ -48,7 +48,7 @@ exports.telegramAuth = async (req, res) => {
     }
 
     // ----------------------------------------------------
-    // 2. Verify Telegram WebApp signature (correct method)
+    // 2. Verify Telegram WebApp signature
     // ----------------------------------------------------
     try {
       validate(authData, process.env.TELEGRAM_BOT_TOKEN);
@@ -63,9 +63,9 @@ exports.telegramAuth = async (req, res) => {
     const tgUser = parsedAuthData.user;
 
     // ----------------------------------------------------
-    // 3. Find or create user
+    // 3. Find or create user (FIXED: telegramId must be STRING)
     // ----------------------------------------------------
-    let user = await User.findOne({ where: { telegramId: tgUser.id } });
+    let user = await User.findOne({ where: { telegramId: String(tgUser.id) } });
 
     if (user) {
       // Update existing user
@@ -77,7 +77,7 @@ exports.telegramAuth = async (req, res) => {
     } else {
       // Create new user
       user = await User.create({
-        telegramId: tgUser.id,
+        telegramId: String(tgUser.id),   // FIXED
         username: tgUser.username || "",
         firstName: tgUser.first_name || "",
         lastName: tgUser.last_name || "",
