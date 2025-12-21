@@ -1,484 +1,825 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Phaser from "phaser";
+import { gameAPI } from "../services/api";
+import { useAuthStore } from "../store";
 
-const Game = ({ username: propUsername = "Player" }) => {
+const Game = () => {
   const gameRef = useRef(null);
+  const sceneRef = useRef(null);
+  const navigate = useNavigate();
+  const { user, updateUser } = useAuthStore();
+  
+  const [gameState, setGameState] = useState({
+    isLoading: true,
+    isPaused: false,
+  });
 
   useEffect(() => {
     if (gameRef.current) return;
 
-    class RunnerScene extends Phaser.Scene {
+    class MainScene extends Phaser.Scene {
       constructor() {
-        super("RunnerScene");
-
-        // Player
-        this.playerBody = null;
-        this.playerEmoji = null;
-
-        // Groups
-        this.obstacles = null;
-        this.coins = null;
-
-        // UI state
-        this.username = propUsername;
-        this.coinCount = 0;
+        super({ key: "MainScene" });
+        this.player = null;
+        this.score = 0;
+        this.coinsCollected = 0; // FIXED: Renamed from this.coins
+        this.distance = 0;
+        this.gameTime = 0;
         this.level = 1;
+        this.gameOver = false;
+        this.started = false;
+        this.isPaused = false;
+        this.currentSpeed = 280;
+        this.currentLane = 1;
+        this.isMoving = false;
+        this.username = user?.username || user?.firstName || "Player";
         this.startTime = 0;
-        this.elapsedSeconds = 0;
-
-        // Gameplay state
-        this.isRunning = false; // true while user holds pointer (or hold key)
-        this.isGameOver = false;
-        this.baseSpeed = 300;
-        this.speed = this.baseSpeed;
-
-        // Input / double-tap
-        this.lastTap = 0;
-        this.doubleTapWindow = 250; // ms
-
-        // Retry timing rules
-        // - After game over, player has a 20s window to retry once.
-        // - If they use that retry, the next retry is allowed only after 60s from when they used it.
-        // We'll persist lastRetryUsedAt in localStorage so it survives reloads.
-        this.gameOverTime = null;
-        this.retryKey = "runner_lastRetryUsedAt";
       }
 
-      preload() {}
+      preload() {
+        this.createGraphics();
+      }
+
+      createGraphics() {
+        const g = this.make.graphics({ add: false });
+        
+        // PLAYER CAR - Cyan glass
+        g.clear();
+        g.fillStyle(0x00D9FF, 1);
+        g.fillRoundedRect(5, 10, 50, 80, 12);
+        g.fillStyle(0x0088AA, 0.8);
+        g.fillRoundedRect(15, 20, 30, 25, 8);
+        g.fillStyle(0x1a1a1a, 1);
+        g.fillCircle(15, 15, 8);
+        g.fillCircle(45, 15, 8);
+        g.fillCircle(15, 75, 8);
+        g.fillCircle(45, 75, 8);
+        g.fillStyle(0xFFFFFF, 0.9);
+        g.fillCircle(18, 85, 4);
+        g.fillCircle(42, 85, 4);
+        g.generateTexture('player', 60, 90);
+        
+        // OBSTACLE CAR - Red
+        g.clear();
+        g.fillStyle(0xFF3366, 1);
+        g.fillRoundedRect(5, 10, 50, 80, 12);
+        g.fillStyle(0xAA0022, 0.8);
+        g.fillRoundedRect(15, 20, 30, 25, 8);
+        g.fillStyle(0x1a1a1a, 1);
+        g.fillCircle(15, 15, 8);
+        g.fillCircle(45, 15, 8);
+        g.fillCircle(15, 75, 8);
+        g.fillCircle(45, 75, 8);
+        g.generateTexture('car', 60, 90);
+        
+        // ROCK - Purple crystal
+        g.clear();
+        g.fillStyle(0x9D4EDD, 1);
+        g.beginPath();
+        g.moveTo(40, 10);
+        g.lineTo(70, 40);
+        g.lineTo(60, 70);
+        g.lineTo(20, 70);
+        g.lineTo(10, 40);
+        g.closePath();
+        g.fillPath();
+        g.fillStyle(0xC77DFF, 0.6);
+        g.fillCircle(40, 35, 15);
+        g.generateTexture('rock', 80, 80);
+        
+        // COIN - Golden orb
+        g.clear();
+        g.fillStyle(0xFFD700, 1);
+        g.fillCircle(25, 25, 18);
+        g.fillStyle(0xFFF4A3, 0.8);
+        g.fillCircle(25, 25, 12);
+        g.fillStyle(0xFFFFFF, 0.6);
+        g.fillCircle(20, 20, 6);
+        g.generateTexture('coin', 50, 50);
+        
+        // GROUND
+        g.clear();
+        g.fillStyle(0x2D3142, 0.9);
+        g.fillRect(0, 0, 100, 100);
+        g.lineStyle(2, 0x00D9FF, 0.3);
+        g.strokeRect(0, 0, 100, 100);
+        g.generateTexture('ground', 100, 100);
+        
+        // PARTICLE
+        g.clear();
+        g.fillStyle(0xFFFFFF, 1);
+        g.fillCircle(4, 4, 4);
+        g.generateTexture('particle', 8, 8);
+        
+        g.destroy();
+      }
 
       create() {
         const { width, height } = this.scale;
-
-        // Try to read Telegram WebApp username if available
-        try {
-          const tg = window.Telegram?.WebApp;
-          const twaUser = tg?.initDataUnsafe?.user?.username || tg?.initDataUnsafe?.user?.first_name;
-          if (twaUser) this.username = twaUser;
-        } catch (e) {
-          // ignore
+        
+        // Background gradient
+        const bg = this.add.graphics();
+        bg.fillGradientStyle(0x667eea, 0x667eea, 0x764ba2, 0x764ba2, 1, 1, 1, 1);
+        bg.fillRect(0, 0, width, height);
+        
+        // Lane setup
+        this.laneWidth = width / 3;
+        
+        // Ground tiles
+        this.groundTiles = [];
+        for (let i = 0; i < 8; i++) {
+          const tile = this.add.tileSprite(width / 2, height - 200 + (i * 120), width * 0.8, 120, 'ground');
+          tile.setAlpha(0.8);
+          this.groundTiles.push(tile);
         }
-
-        // Background
-        this.cameras.main.setBackgroundColor("#F5F5F5");
-
-        // Ground (raised so visible)
-        this.groundY = height - 120;
-        const ground = this.add.rectangle(width / 2, this.groundY + 20, width, 40, 0x8b8b8b);
-        this.physics.add.existing(ground, true);
-
-        // Player physics body (larger, proportional)
-        const playerW = 90;
-        const playerH = 120;
-        this.playerBody = this.add.rectangle(140, this.groundY - playerH / 2, playerW, playerH, 0x000000, 0);
-        this.physics.add.existing(this.playerBody);
-        this.playerBody.body.setGravityY(1400);
-        this.playerBody.body.setCollideWorldBounds(true);
-        this.physics.add.collider(this.playerBody, ground);
-
-        // Player emoji visual (stand/run/jump)
-        // stand = 🧍‍♂️, run = 🚶‍♂️, jump = 🏃‍♂️
-        this.playerEmoji = this.add
-          .text(this.playerBody.x, this.playerBody.y - 10, "🧍‍♂️", { fontSize: "96px" })
-          .setOrigin(0.5);
-
-        // Top UI (username, coins, level, time)
-        const uiWidth = width * 0.96;
-        this.add.rectangle(width / 2, 36, uiWidth, 64, 0xffffff, 0.25).setStrokeStyle(2, 0xffffff, 0.4);
-
-        this.usernameText = this.add.text(18, 18, `User: ${this.username}`, {
-          fontSize: "16px",
-          color: "#000",
+        
+        // Lane lines with glow
+        const leftLine = this.add.rectangle(this.laneWidth, 0, 6, height, 0x00D9FF, 0.5).setOrigin(0.5, 0);
+        const rightLine = this.add.rectangle(this.laneWidth * 2, 0, 6, height, 0x00D9FF, 0.5).setOrigin(0.5, 0);
+        
+        this.tweens.add({
+          targets: [leftLine, rightLine],
+          alpha: 0.2,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1,
         });
-
-        this.coinsText = this.add.text(width / 2 - 40, 18, `Coins: ${this.coinCount}`, {
-          fontSize: "16px",
-          color: "#000",
+        
+        // Player
+        this.player = this.add.sprite(this.getLaneX(1), height - 220, 'player');
+        this.player.setScale(0.9);
+        this.player.setDepth(100);
+        
+        this.tweens.add({
+          targets: this.player,
+          y: height - 222,
+          duration: 100,
+          yoyo: true,
+          repeat: -1,
         });
+        
+        // UI
+        this.createUI();
+        
+        // Groups - FIXED: Renamed to avoid conflict
+        this.obstaclesGroup = this.add.group(); // Was this.obstacles
+        this.coinsGroup = this.add.group();     // Was this.coins
+        
+        // Particle system for effects
+        this.particles = this.add.particles('particle');
+        
+        // Controls
+        this.setupControls();
+        
+        // Show intro
+        this.showIntro();
+      }
 
-        this.levelText = this.add.text(width - 140, 18, `Level: ${this.level}`, {
-          fontSize: "16px",
-          color: "#000",
+      createUI() {
+        const { width, height } = this.scale;
+        
+        // Top panel background
+        const panel = this.add.graphics();
+        panel.fillStyle(0x000000, 0.4);
+        panel.fillRoundedRect(10, 10, width - 20, 150, 20);
+        panel.lineStyle(2, 0xFFFFFF, 0.2);
+        panel.strokeRoundedRect(10, 10, width - 20, 150, 20);
+        panel.setDepth(900);
+        
+        // Username badge
+        const userBadge = this.add.graphics();
+        userBadge.fillStyle(0x00D9FF, 0.3);
+        userBadge.fillRoundedRect(25, 25, 220, 45, 12);
+        userBadge.lineStyle(2, 0x00D9FF, 0.6);
+        userBadge.strokeRoundedRect(25, 25, 220, 45, 12);
+        userBadge.setDepth(901);
+        
+        this.add.text(35, 47, `👤 ${this.username}`, {
+          fontSize: '22px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setOrigin(0, 0.5).setDepth(902);
+        
+        // Stats row
+        const statsY = 95;
+        const statsSpacing = (width - 80) / 3;
+        
+        // Score
+        this.add.text(40, statsY, 'SCORE', {
+          fontSize: '14px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          alpha: 0.7,
+        }).setDepth(901);
+        
+        this.scoreText = this.add.text(40, statsY + 25, '0', {
+          fontSize: '36px',
+          color: '#FFD700',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setDepth(901);
+        
+        // Time
+        this.add.text(40 + statsSpacing, statsY, 'TIME', {
+          fontSize: '14px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          alpha: 0.7,
+        }).setDepth(901);
+        
+        this.timeText = this.add.text(40 + statsSpacing, statsY + 25, '0:00', {
+          fontSize: '36px',
+          color: '#00D9FF',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setDepth(901);
+        
+        // Level
+        this.add.text(40 + statsSpacing * 2, statsY, 'LEVEL', {
+          fontSize: '14px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          alpha: 0.7,
+        }).setDepth(901);
+        
+        this.levelText = this.add.text(40 + statsSpacing * 2, statsY + 25, '1', {
+          fontSize: '36px',
+          color: '#9D4EDD',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setDepth(901);
+        
+        // Coins badge (bottom left)
+        const coinBadge = this.add.graphics();
+        coinBadge.fillStyle(0xFFD700, 0.3);
+        coinBadge.fillRoundedRect(20, height - 80, 160, 60, 15);
+        coinBadge.lineStyle(2, 0xFFD700, 0.6);
+        coinBadge.strokeRoundedRect(20, height - 80, 160, 60, 15);
+        coinBadge.setDepth(900);
+        
+        this.add.text(35, height - 50, '💰', {
+          fontSize: '32px',
+        }).setOrigin(0, 0.5).setDepth(901);
+        
+        this.coinText = this.add.text(80, height - 50, '0', {
+          fontSize: '32px',
+          color: '#FFD700',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setOrigin(0, 0.5).setDepth(901);
+        
+        // Distance badge (bottom right)
+        const distBadge = this.add.graphics();
+        distBadge.fillStyle(0x00D9FF, 0.3);
+        distBadge.fillRoundedRect(width - 180, height - 80, 160, 60, 15);
+        distBadge.lineStyle(2, 0x00D9FF, 0.6);
+        distBadge.strokeRoundedRect(width - 180, height - 80, 160, 60, 15);
+        distBadge.setDepth(900);
+        
+        this.add.text(width - 100, height - 65, 'DISTANCE', {
+          fontSize: '12px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          alpha: 0.7,
+        }).setOrigin(0.5).setDepth(901);
+        
+        this.distanceText = this.add.text(width - 100, height - 40, '0m', {
+          fontSize: '28px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(901);
+      }
+
+      setupControls() {
+        this.input.on('pointerdown', (pointer) => {
+          this.swipeStartX = pointer.x;
+          this.swipeStartY = pointer.y;
         });
-
-        this.timeText = this.add.text(18, 40, `Time: 0s`, {
-          fontSize: "14px",
-          color: "#000",
+        
+        this.input.on('pointerup', (pointer) => {
+          if (!this.started || this.gameOver) return;
+          
+          const diffX = pointer.x - this.swipeStartX;
+          const diffY = pointer.y - this.swipeStartY;
+          
+          if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+            if (diffX > 0) this.moveRight();
+            else this.moveLeft();
+          } else if (diffY < -50) {
+            this.jump();
+          }
         });
+        
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.keyA = this.input.keyboard.addKey('A');
+        this.keyD = this.input.keyboard.addKey('D');
+        this.keyW = this.input.keyboard.addKey('W');
+      }
 
-        this.retryInfoText = this.add.text(width - 260, 40, `Retry: available`, {
-          fontSize: "14px",
-          color: "#000",
+      getLaneX(lane) {
+        return (lane * this.laneWidth) + (this.laneWidth / 2);
+      }
+
+      showIntro() {
+        const { width, height } = this.scale;
+        
+        const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.85).setOrigin(0).setDepth(1000);
+        
+        const card = this.add.graphics();
+        card.fillStyle(0xFFFFFF, 0.15);
+        card.fillRoundedRect(width/2 - 300, height/2 - 250, 600, 500, 25);
+        card.lineStyle(3, 0xFFFFFF, 0.3);
+        card.strokeRoundedRect(width/2 - 300, height/2 - 250, 600, 500, 25);
+        card.setDepth(1001);
+        
+        const title = this.add.text(width / 2, height / 2 - 150, '🏎️ GLASS RACER 🏎️', {
+          fontSize: '56px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(1002);
+        
+        this.tweens.add({
+          targets: title,
+          alpha: 0.7,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1,
         });
-
-        // Groups
-        this.obstacles = this.physics.add.group();
-        this.coins = this.physics.add.group();
-
-        // Input: pointer hold to run, double-tap to jump
-        this.input.on("pointerdown", this.onPointerDown, this);
-        this.input.on("pointerup", this.onPointerUp, this);
-
-        // Keyboard support:
-        // - Space = jump
-        // - ArrowRight (hold) = run
-        this.keys = this.input.keyboard.addKeys({
-          space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-          right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+        
+        const instructions = this.add.text(width / 2, height / 2 - 30,
+          'CONTROLS:\n\n' +
+          'SWIPE LEFT/RIGHT - Change Lanes\n' +
+          'SWIPE UP - Jump over obstacles\n\n' +
+          'KEYBOARD:\n' +
+          'Arrow Keys: ← → ↑\n' +
+          'WASD Keys: A D W\n\n' +
+          'Avoid red cars & purple rocks!\n' +
+          'Collect golden orbs for points!',
+          {
+            fontSize: '20px',
+            color: '#FFFFFF',
+            fontFamily: 'Arial',
+            align: 'center',
+            lineSpacing: 10,
+          }
+        ).setOrigin(0.5).setDepth(1002);
+        
+        const btn = this.add.graphics();
+        btn.fillStyle(0x00D9FF, 0.6);
+        btn.fillRoundedRect(width/2 - 120, height/2 + 180, 240, 70, 15);
+        btn.lineStyle(3, 0x00D9FF, 0.9);
+        btn.strokeRoundedRect(width/2 - 120, height/2 + 180, 240, 70, 15);
+        btn.setDepth(1001);
+        btn.setInteractive(
+          new Phaser.Geom.Rectangle(width/2 - 120, height/2 + 180, 240, 70),
+          Phaser.Geom.Rectangle.Contains
+        );
+        
+        const btnText = this.add.text(width / 2, height / 2 + 215, '▶ START RACE', {
+          fontSize: '28px',
+          color: '#FFFFFF',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(1002);
+        
+        btn.on('pointerover', () => {
+          btn.clear();
+          btn.fillStyle(0x00FFFF, 0.8);
+          btn.fillRoundedRect(width/2 - 120, height/2 + 180, 240, 70, 15);
+          btn.lineStyle(3, 0x00FFFF, 1);
+          btn.strokeRoundedRect(width/2 - 120, height/2 + 180, 240, 70, 15);
         });
-
-        this.keys.space.on("down", () => {
-          // treat space as immediate jump
-          this.jump();
+        
+        btn.on('pointerout', () => {
+          btn.clear();
+          btn.fillStyle(0x00D9FF, 0.6);
+          btn.fillRoundedRect(width/2 - 120, height/2 + 180, 240, 70, 15);
+          btn.lineStyle(3, 0x00D9FF, 0.9);
+          btn.strokeRoundedRect(width/2 - 120, height/2 + 180, 240, 70, 15);
         });
-
-        this.keys.right.on("down", () => {
-          this.startRunning();
+        
+        btn.on('pointerdown', () => {
+          overlay.destroy();
+          card.destroy();
+          title.destroy();
+          instructions.destroy();
+          btn.destroy();
+          btnText.destroy();
+          this.startGame();
         });
-        this.keys.right.on("up", () => {
-          this.stopRunning();
-        });
+      }
 
-        // Collisions
-        this.physics.add.collider(this.playerBody, this.obstacles, this.onHit, null, this);
-        this.physics.add.overlap(this.playerBody, this.coins, this.collectCoin, null, this);
-
-        // Spawn timers
-        this.time.addEvent({
-          delay: 1200,
+      startGame() {
+        console.log("🎮 Game started!");
+        this.started = true;
+        this.startTime = this.time.now;
+        
+        this.obstacleTimer = this.time.addEvent({
+          delay: 2000,
           callback: this.spawnObstacle,
           callbackScope: this,
           loop: true,
         });
-
-        this.time.addEvent({
-          delay: 900,
+        
+        this.coinTimer = this.time.addEvent({
+          delay: 1800,
           callback: this.spawnCoin,
           callbackScope: this,
           loop: true,
         });
-
-        // Start time and periodic updates
-        this.startTime = Date.now();
-        this.time.addEvent({
-          delay: 1000,
+        
+        this.levelTimer = this.time.addEvent({
+          delay: 30000,
           callback: () => {
-            if (this.isGameOver) return;
-            this.elapsedSeconds = Math.floor((Date.now() - this.startTime) / 1000);
-            this.timeText.setText(`Time: ${this.elapsedSeconds}s`);
-            this.updateLevelAndSpeed();
+            this.level++;
+            this.currentSpeed = Math.min(this.currentSpeed + 40, 550);
+            this.levelText.setText(this.level);
+            console.log(`🎚️ Level ${this.level}! Speed: ${this.currentSpeed}`);
+            this.showLevelUp();
           },
-          loop: true,
-        });
-
-        // Ensure retry state text is correct at start
-        this.updateRetryText();
-      }
-
-      // Pointer handlers: hold to run, double-tap to jump
-      onPointerDown() {
-        if (this.isGameOver) {
-          // If game over, clicking retry area handled separately; pointerdown here should not start running
-          return;
-        }
-
-        const now = Date.now();
-        if (now - this.lastTap <= this.doubleTapWindow) {
-          // double-tap -> jump
-          this.jump();
-        } else {
-          // start running while pointer held
-          this.startRunning();
-        }
-        this.lastTap = now;
-      }
-
-      onPointerUp() {
-        if (this.isGameOver) return;
-        this.stopRunning();
-      }
-
-      // Start/stop running: obstacles move only while running
-      startRunning() {
-        if (this.isRunning || this.isGameOver) return;
-        this.isRunning = true;
-        this.playerEmoji.setText("🚶‍♂️"); // run emoji per user request
-        // set obstacle velocities
-        this.obstacles.children.iterate((o) => {
-          if (o && o.body) o.body.setVelocityX(-this.speed);
-        });
-        this.coins.children.iterate((c) => {
-          if (c && c.body) c.body.setVelocityX(-this.speed);
-        });
-      }
-
-      stopRunning() {
-        if (!this.isRunning || this.isGameOver) return;
-        this.isRunning = false;
-        this.playerEmoji.setText("🧍‍♂️"); // stand
-        // stop obstacles
-        this.obstacles.children.iterate((o) => {
-          if (o && o.body) o.body.setVelocityX(0);
-        });
-        this.coins.children.iterate((c) => {
-          if (c && c.body) c.body.setVelocityX(0);
-        });
-      }
-
-      // Jump (double-tap or space)
-      jump() {
-        if (this.isGameOver) return;
-        if (!this.playerBody.body.blocked.down) return;
-        this.playerBody.body.setVelocityY(-700);
-        this.playerEmoji.setText("🏃‍♂️"); // jump emoji
-        // revert after short delay if on ground
-        this.time.delayedCall(400, () => {
-          if (!this.isGameOver) {
-            this.playerEmoji.setText(this.isRunning ? "🚶‍♂️" : "🧍‍♂️");
-          }
-        });
-      }
-
-      // Spawn stone obstacle (emoji + invisible physics body)
-      spawnObstacle() {
-        if (this.isGameOver) return;
-        const { width } = this.scale;
-        const groundY = this.groundY;
-
-        const obsW = Phaser.Math.Between(36, 56);
-        const obsH = Phaser.Math.Between(36, 56);
-        const obsBody = this.add.rectangle(width + 40, groundY - obsH / 2, obsW, obsH, 0x000000, 0);
-        this.physics.add.existing(obsBody);
-        obsBody.body.setImmovable(true);
-        obsBody.body.allowGravity = false;
-        obsBody.body.setVelocityX(this.isRunning ? -this.speed : 0);
-
-        // emoji visual (stone)
-        const fontSize = Math.min(Math.max(obsW, 28), 48);
-        const obsEmoji = this.add.text(obsBody.x, obsBody.y - 6, "🪨", { fontSize: `${fontSize}px` }).setOrigin(0.5);
-        obsBody.emoji = obsEmoji;
-
-        this.obstacles.add(obsBody);
-      }
-
-      // Spawn coin (emoji + invisible physics body)
-      spawnCoin() {
-        if (this.isGameOver) return;
-        const { width } = this.scale;
-        const y = Phaser.Math.Between(180, this.groundY - 80);
-
-        const coinBody = this.add.rectangle(width + 40, y, 20, 20, 0x000000, 0);
-        this.physics.add.existing(coinBody);
-        coinBody.body.allowGravity = false;
-        coinBody.body.setVelocityX(this.isRunning ? -this.speed : 0);
-
-        const coinEmoji = this.add.text(coinBody.x, coinBody.y - 6, "🪙", { fontSize: "28px" }).setOrigin(0.5);
-        coinBody.emoji = coinEmoji;
-
-        this.coins.add(coinBody);
-      }
-
-      // Collect coin handler
-      collectCoin(playerBody, coinBody) {
-        if (!coinBody) return;
-        if (coinBody.emoji) coinBody.emoji.destroy();
-        coinBody.destroy();
-        this.coinCount += 1;
-        this.coinsText.setText(`Coins: ${this.coinCount}`);
-      }
-
-      // Hit obstacle -> game over and show retry UI
-      onHit() {
-        if (this.isGameOver) return;
-        this.isGameOver = true;
-        this.physics.pause();
-        this.playerEmoji.setText("💥");
-
-        // record game over time
-        this.gameOverTime = Date.now();
-
-        const { width, height } = this.scale;
-        this.add.text(width / 2, height / 2 - 60, "GAME OVER", {
-          fontSize: "40px",
-          color: "#333",
-        }).setOrigin(0.5);
-
-        // Retry button
-        this.retryRect = this.add
-          .rectangle(width / 2, height / 2 + 20, 220, 60, 0xffffff)
-          .setStrokeStyle(2, 0x333333)
-          .setInteractive({ useHandCursor: true });
-
-        this.retryLabel = this.add
-          .text(width / 2, height / 2 + 20, "Retry", { fontSize: "22px", color: "#333" })
-          .setOrigin(0.5);
-
-        // Update retry text immediately
-        this.updateRetryText();
-
-        // Retry click handler
-        this.retryRect.on("pointerdown", () => {
-          if (this.canRetryNow()) {
-            // mark retry used (persist)
-            const now = Date.now();
-            try {
-              localStorage.setItem(this.retryKey, String(now));
-            } catch (e) {
-              // ignore storage errors
-            }
-            // restart scene
-            this.scene.restart();
-          } else {
-            // flash the retry info to indicate locked
-            this.tweens.add({
-              targets: this.retryLabel,
-              alpha: 0.3,
-              duration: 120,
-              yoyo: true,
-              repeat: 2,
-            });
-          }
-        });
-
-        // Start a timer to update retry availability text every second
-        this.retryTimer = this.time.addEvent({
-          delay: 1000,
-          callback: this.updateRetryText,
           callbackScope: this,
           loop: true,
         });
       }
 
-      // Determine if retry is allowed now
-      canRetryNow() {
-        const now = Date.now();
-        const lastRetryUsedAt = Number(localStorage.getItem(this.retryKey) || 0);
-
-        // If no retry used before:
-        if (!lastRetryUsedAt) {
-          // allow retry only within first 20s after gameOverTime
-          if (!this.gameOverTime) return false;
-          return now - this.gameOverTime <= 20_000;
-        }
-
-        // If retry was used previously, allow next retry only after 60s from lastRetryUsedAt
-        return now - lastRetryUsedAt >= 60_000;
+      showLevelUp() {
+        const { width, height } = this.scale;
+        
+        const levelUpText = this.add.text(width / 2, height / 2, `LEVEL ${this.level}!`, {
+          fontSize: '72px',
+          color: '#FFD700',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+          stroke: '#000',
+          strokeThickness: 8,
+        }).setOrigin(0.5).setDepth(3000).setAlpha(0);
+        
+        this.tweens.add({
+          targets: levelUpText,
+          alpha: 1,
+          scale: 1.3,
+          duration: 400,
+          yoyo: true,
+          onComplete: () => levelUpText.destroy()
+        });
       }
 
-      // Update the retry info text shown in the top-right
-      updateRetryText() {
-        const now = Date.now();
-        const lastRetryUsedAt = Number(localStorage.getItem(this.retryKey) || 0);
-
-        // If game not over yet, show availability based on lastRetryUsedAt only
-        if (!this.gameOverTime) {
-          if (!lastRetryUsedAt) {
-            this.retryInfoText.setText("Retry: available");
-          } else {
-            const elapsedSinceUse = now - lastRetryUsedAt;
-            if (elapsedSinceUse >= 60_000) {
-              this.retryInfoText.setText("Retry: available");
-            } else {
-              const remain = Math.ceil((60_000 - elapsedSinceUse) / 1000);
-              this.retryInfoText.setText(`Retry: locked (${remain}s)`);
-            }
-          }
-          return;
-        }
-
-        // If game over and no retry used yet
-        if (!lastRetryUsedAt) {
-          const elapsed = now - this.gameOverTime;
-          if (elapsed <= 20_000) {
-            const remain = Math.ceil((20_000 - elapsed) / 1000);
-            this.retryInfoText.setText(`Retry: available (${remain}s)`);
-            if (this.retryRect) {
-              this.retryRect.setFillStyle(0xffffff, 1);
-              this.retryLabel.setColor("#333");
-            }
-          } else {
-            // locked until 60s after gameOverTime
-            const until = Math.ceil((60_000 - elapsed) / 1000);
-            if (until > 0) {
-              this.retryInfoText.setText(`Retry: locked (${until}s)`);
-              if (this.retryRect) {
-                this.retryRect.setFillStyle(0xdddddd, 1);
-                this.retryLabel.setColor("#999");
-              }
-            } else {
-              // after 60s from gameOverTime, allow retry again
-              this.retryInfoText.setText("Retry: available");
-              if (this.retryRect) {
-                this.retryRect.setFillStyle(0xffffff, 1);
-                this.retryLabel.setColor("#333");
-              }
-            }
-          }
-          return;
-        }
-
-        // If retry was used previously
-        const elapsedSinceUse = now - lastRetryUsedAt;
-        if (elapsedSinceUse >= 60_000) {
-          this.retryInfoText.setText("Retry: available");
-          if (this.retryRect) {
-            this.retryRect.setFillStyle(0xffffff, 1);
-            this.retryLabel.setColor("#333");
-          }
-        } else {
-          const remain = Math.ceil((60_000 - elapsedSinceUse) / 1000);
-          this.retryInfoText.setText(`Retry: locked (${remain}s)`);
-          if (this.retryRect) {
-            this.retryRect.setFillStyle(0xdddddd, 1);
-            this.retryLabel.setColor("#999");
-          }
-        }
+      moveLeft() {
+        if (this.isMoving || this.currentLane <= 0) return;
+        this.isMoving = true;
+        this.currentLane--;
+        
+        this.tweens.add({
+          targets: this.player,
+          x: this.getLaneX(this.currentLane),
+          duration: 150,
+          ease: 'Quad.easeOut',
+          onComplete: () => { this.isMoving = false; }
+        });
       }
 
-      updateLevelAndSpeed() {
-        // Level increases every 30 seconds
-        const newLevel = Math.floor(this.elapsedSeconds / 30) + 1;
-        if (newLevel !== this.level) {
-          this.level = newLevel;
-          this.levelText.setText(`Level: ${this.level}`);
-          // bump base speed on level up
-          this.baseSpeed += 40;
-        }
-        this.speed = this.baseSpeed + (this.level - 1) * 20;
-        // if running, update obstacle velocities
-        if (this.isRunning) {
-          this.obstacles.children.iterate((o) => {
-            if (o && o.body) o.body.setVelocityX(-this.speed);
-          });
-          this.coins.children.iterate((c) => {
-            if (c && c.body) c.body.setVelocityX(-this.speed);
-          });
-        }
+      moveRight() {
+        if (this.isMoving || this.currentLane >= 2) return;
+        this.isMoving = true;
+        this.currentLane++;
+        
+        this.tweens.add({
+          targets: this.player,
+          x: this.getLaneX(this.currentLane),
+          duration: 150,
+          ease: 'Quad.easeOut',
+          onComplete: () => { this.isMoving = false; }
+        });
       }
 
-      update() {
-        // Sync player emoji to physics body
-        if (this.playerBody && this.playerEmoji) {
-          this.playerEmoji.setPosition(this.playerBody.x, this.playerBody.y - 10);
-        }
+      jump() {
+        if (this.player.isJumping) return;
+        this.player.isJumping = true;
+        const startY = this.player.y;
+        
+        this.tweens.add({
+          targets: this.player,
+          y: startY - 120,
+          duration: 350,
+          ease: 'Quad.easeOut',
+          yoyo: true,
+          onComplete: () => { this.player.isJumping = false; }
+        });
+      }
 
-        // Sync obstacle/coin emojis and cleanup off-screen
-        this.obstacles.children.iterate((o) => {
-          if (!o) return;
-          if (o.emoji) o.emoji.setPosition(o.x, o.y - 6);
-          if (o.x < -200) {
-            if (o.emoji) o.emoji.destroy();
-            o.destroy();
+      spawnObstacle() {
+        if (!this.started || this.gameOver) return;
+        
+        const lane = Phaser.Math.Between(0, 2);
+        const x = this.getLaneX(lane);
+        const { height } = this.scale;
+        
+        const isCar = Math.random() > 0.4;
+        const obs = this.add.sprite(x, -100, isCar ? 'car' : 'rock');
+        obs.setData('lane', lane);
+        obs.setScale(0.8);
+        this.obstaclesGroup.add(obs); // FIXED: Use renamed group
+        
+        this.tweens.add({
+          targets: obs,
+          y: height + 100,
+          duration: Math.max(1500, 2500 - (this.level * 80)),
+          ease: 'Linear',
+          onComplete: () => {
+            if (obs.active) obs.destroy();
           }
         });
+      }
 
-        this.coins.children.iterate((c) => {
-          if (!c) return;
-          if (c.emoji) c.emoji.setPosition(c.x, c.y - 6);
-          if (c.x < -200) {
-            if (c.emoji) c.emoji.destroy();
-            c.destroy();
+      spawnCoin() {
+        if (!this.started || this.gameOver) return;
+        
+        const lane = Phaser.Math.Between(0, 2);
+        const x = this.getLaneX(lane);
+        const { height } = this.scale;
+        
+        const coin = this.add.sprite(x, -100, 'coin');
+        coin.setData('lane', lane);
+        coin.setData('collected', false);
+        coin.setScale(0.8);
+        coin.setDepth(50);
+        this.coinsGroup.add(coin); // FIXED: Use renamed group
+        
+        // Floating animation
+        this.tweens.add({
+          targets: coin,
+          angle: 360,
+          duration: 1500,
+          repeat: -1,
+        });
+        
+        // Pulse effect
+        this.tweens.add({
+          targets: coin,
+          scale: 0.9,
+          duration: 800,
+          yoyo: true,
+          repeat: -1,
+        });
+        
+        // Move down
+        this.tweens.add({
+          targets: coin,
+          y: height + 100,
+          duration: Math.max(1500, 2500 - (this.level * 80)),
+          ease: 'Linear',
+          onComplete: () => {
+            if (coin.active && !coin.getData('collected')) {
+              coin.destroy();
+            }
           }
         });
+      }
+
+      checkCollisions() {
+        if (!this.started || this.gameOver) return;
+        
+        const playerY = this.player.y;
+        const playerLane = this.currentLane;
+        
+        // Check obstacles
+        this.obstaclesGroup.children.entries.forEach((obs) => {
+          if (!obs.active) return;
+          
+          const obsY = obs.y;
+          const obsLane = obs.getData('lane');
+          
+          if (obsLane === playerLane && Math.abs(obsY - playerY) < 60) {
+            if (!this.player.isJumping) {
+              this.hitObstacle();
+            }
+          }
+        });
+        
+        // Check coins - FIXED with proper juice!
+        this.coinsGroup.children.entries.forEach((coin) => {
+          if (!coin.active || coin.getData('collected')) return;
+          
+          const coinY = coin.y;
+          const coinLane = coin.getData('lane');
+          
+          if (coinLane === playerLane && Math.abs(coinY - playerY) < 55) {
+            // Mark collected FIRST
+            coin.setData('collected', true);
+            
+            // VISUAL JUICE - Particle burst
+            const emitter = this.particles.createEmitter({
+              x: coin.x,
+              y: coin.y,
+              speed: { min: 100, max: 300 },
+              angle: { min: 0, max: 360 },
+              scale: { start: 1.5, end: 0 },
+              alpha: { start: 1, end: 0 },
+              tint: 0xFFD700,
+              lifespan: 600,
+              blendMode: 'ADD',
+              quantity: 20,
+            });
+            emitter.explode();
+            
+            // VISUAL JUICE - Floating +10 text
+            const plusText = this.add.text(coin.x, coin.y, '+10', {
+              fontSize: '32px',
+              color: '#FFD700',
+              fontFamily: 'Arial',
+              fontStyle: 'bold',
+              stroke: '#000',
+              strokeThickness: 4,
+            }).setOrigin(0.5).setDepth(200);
+            
+            this.tweens.add({
+              targets: plusText,
+              y: coin.y - 80,
+              alpha: 0,
+              duration: 800,
+              ease: 'Quad.easeOut',
+              onComplete: () => plusText.destroy()
+            });
+            
+            // VISUAL JUICE - Score text pop
+            this.tweens.add({
+              targets: this.scoreText,
+              scale: 1.2,
+              duration: 100,
+              yoyo: true,
+              ease: 'Quad.easeOut',
+            });
+            
+            // VISUAL JUICE - Coin badge pulse
+            this.tweens.add({
+              targets: this.coinText,
+              scale: 1.3,
+              duration: 100,
+              yoyo: true,
+              ease: 'Back.easeOut',
+            });
+            
+            // Update score (local only - no database)
+            this.coinsCollected++; // FIXED: Use renamed variable
+            this.score += 10;
+            
+            // Update UI
+            this.scoreText.setText(this.score);
+            this.coinText.setText(this.coinsCollected);
+            
+            // Destroy coin immediately
+            coin.destroy();
+            
+            // Clean up emitter
+            this.time.delayedCall(600, () => emitter.remove());
+          }
+        });
+      }
+
+      hitObstacle() {
+        if (this.gameOver) return;
+        
+        console.log("💥 Game over!");
+        this.gameOver = true;
+        
+        // Visual feedback
+        this.player.setTint(0xFF0000);
+        this.cameras.main.shake(300, 0.02);
+        
+        // Explosion particles
+        const explosion = this.particles.createEmitter({
+          x: this.player.x,
+          y: this.player.y,
+          speed: { min: 200, max: 500 },
+          angle: { min: 0, max: 360 },
+          scale: { start: 2, end: 0 },
+          tint: [0xFF0000, 0xFF6600, 0xFFFF00],
+          lifespan: 1000,
+          blendMode: 'ADD',
+          quantity: 40,
+        });
+        explosion.explode();
+        
+        if (this.obstacleTimer) this.obstacleTimer.destroy();
+        if (this.coinTimer) this.coinTimer.destroy();
+        if (this.levelTimer) this.levelTimer.destroy();
+        
+        this.time.delayedCall(600, () => explosion.remove());
+        
+        this.showGameOver();
+      }
+
+      async showGameOver() {
+        const { width, height } = this.scale;
+        
+        const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.9)
+          .setOrigin(0).setDepth(2000);
+        
+        const card = this.add.graphics();
+        card.fillStyle(0xFFFFFF, 0.15);
+        card.fillRoundedRect(width/2 - 300, height/2 - 220, 600, 440, 25);
+        card.lineStyle(3, 0xFFFFFF, 0.3);
+        card.strokeRoundedRect(width/2 - 300, height/2 - 220, 600, 440, 25);
+        card.setDepth(2001);
+        
+        this.add.text(width / 2, height / 2 - 140, '🏁 RACE FINISHED! 🏁', {
+          fontSize: '48px',
+          color: '#FFD700',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(2002);
+        
+        this.add.text(width / 2, height / 2 - 40,
+          `Final Score: ${this.score}\n` +
+          `Coins Collected: ${this.coinsCollected}\n` +
+          `Distance: ${Math.floor(this.distance)}m\n` +
+          `Level Reached: ${this.level}\n` +
+          `Time: ${this.formatTime(this.gameTime)}`,
+          {
+            fontSize: '28px',
+            color: '#FFFFFF',
+            fontFamily: 'Arial',
+            align: 'center',
+            lineSpacing: 16,
+          }
+        ).setOrigin(0.5).setDepth(2002);
+        
+        // Save to database ONCE
+        console.log("💾 Saving to database...");
+        try {
+          await gameAPI.updateScore({
+            score: this.score,
+            coinsCollected: this.coinsCollected,
+            timeSpent: Math.floor(this.gameTime),
+            completed: true,
+          });
+          console.log("✅ Score saved!");
+        } catch (error) {
+          console.error("❌ Save failed:", error);
+        }
+        
+        this.time.delayedCall(3500, () => {
+          if (window.onGameComplete) {
+            window.onGameComplete({
+              score: this.score,
+              coins: this.coinsCollected,
+              distance: Math.floor(this.distance),
+              level: this.level,
+              time: this.gameTime,
+            });
+          }
+        });
+      }
+
+      formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+
+      update(time, delta) {
+        if (!this.started || this.gameOver || this.isPaused) return;
+        
+        this.gameTime = (this.time.now - this.startTime) / 1000;
+        this.timeText.setText(this.formatTime(this.gameTime));
+        
+        this.groundTiles.forEach((tile) => {
+          tile.tilePositionY -= this.currentSpeed * delta * 0.001;
+        });
+        
+        this.distance += this.currentSpeed * delta * 0.001;
+        this.distanceText.setText(Math.floor(this.distance) + 'm');
+        
+        this.checkCollisions();
+        
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.left) || 
+            Phaser.Input.Keyboard.JustDown(this.keyA)) {
+          this.moveLeft();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.right) || 
+            Phaser.Input.Keyboard.JustDown(this.keyD)) {
+          this.moveRight();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || 
+            Phaser.Input.Keyboard.JustDown(this.keyW)) {
+          this.jump();
+        }
+      }
+
+      pauseGame() {
+        if (!this.started || this.gameOver) return;
+        this.isPaused = true;
+        this.scene.pause();
+      }
+
+      resumeGame() {
+        if (!this.started || this.gameOver) return;
+        this.isPaused = false;
+        this.scene.resume();
       }
     }
 
@@ -487,51 +828,104 @@ const Game = ({ username: propUsername = "Player" }) => {
       width: window.innerWidth,
       height: window.innerHeight,
       parent: "phaser-container",
-      physics: {
-        default: "arcade",
-        arcade: {
-          gravity: { y: 0 },
-          debug: false,
-        },
+      backgroundColor: "#667eea",
+      scene: MainScene,
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
       },
-      scene: RunnerScene,
     };
 
+    console.log("🎮 Initializing Glass Racer...");
     gameRef.current = new Phaser.Game(config);
+    sceneRef.current = gameRef.current.scene.scenes[0];
+    
+    setTimeout(() => {
+      setGameState((prev) => ({ ...prev, isLoading: false }));
+    }, 500);
 
-    // Ensure keyboard focus so space/arrow keys work
-    window.focus();
-    try {
-      document.body.tabIndex = -1;
-      document.body.focus();
-    } catch (e) {
-      // ignore
-    }
+    window.onGameComplete = async (results) => {
+      try {
+        const response = await gameAPI.getStats();
+        if (response.data.success) {
+          updateUser({ totalPoints: response.data.data.totalPoints });
+        }
+      } catch (error) {
+        console.error("Failed to update stats:", error);
+      }
+      
+      setTimeout(() => navigate("/dashboard"), 500);
+    };
 
     return () => {
       if (gameRef.current) {
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
+      window.onGameComplete = null;
     };
-  }, [propUsername]);
+  }, [navigate, updateUser, user]);
+
+  const handlePause = () => {
+    if (sceneRef.current) {
+      sceneRef.current.pauseGame();
+      setGameState((prev) => ({ ...prev, isPaused: true }));
+    }
+  };
+
+  const handleResume = () => {
+    if (sceneRef.current) {
+      sceneRef.current.resumeGame();
+      setGameState((prev) => ({ ...prev, isPaused: false }));
+    }
+  };
 
   return (
-    <div
-      id="phaser-container"
-      style={{
-        width: "100vw",
-        height: "100vh",
-        position: "fixed",
-        top: 0,
-        left: 0,
-        margin: 0,
-        padding: 0,
-        overflow: "hidden",
-        background: "#F5F5F5",
-        zIndex: 9999,
-      }}
-    />
+    <div className="relative w-full h-screen overflow-hidden">
+      {gameState.isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center z-50 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500">
+          <div className="text-center backdrop-blur-md bg-white/10 p-12 rounded-3xl border-2 border-white/30">
+            <div className="text-7xl mb-6 animate-bounce">🏎️</div>
+            <div className="text-3xl text-white font-bold">
+              Loading Glass Racer...
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div id="phaser-container" className="w-full h-full"></div>
+
+      {gameState.isPaused && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-40">
+          <div className="bg-white/20 backdrop-blur-xl p-10 rounded-3xl border-2 border-white/30 shadow-2xl">
+            <h2 className="text-5xl font-bold text-white mb-8 text-center">⏸️ PAUSED</h2>
+            <div className="space-y-4">
+              <button 
+                onClick={handleResume}
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-10 rounded-2xl text-xl transition-all transform hover:scale-105 shadow-lg"
+              >
+                ▶️ Resume Race
+              </button>
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="w-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold py-4 px-10 rounded-2xl text-xl transition-all transform hover:scale-105 shadow-lg"
+              >
+                🚪 Quit to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!gameState.isLoading && !gameState.isPaused && (
+        <button
+          onClick={handlePause}
+          className="absolute top-6 right-6 bg-white/20 backdrop-blur-md hover:bg-white/30 text-white p-4 rounded-2xl z-30 text-2xl transition-all transform hover:scale-110 border-2 border-white/30 shadow-lg"
+        >
+          ⏸️
+        </button>
+      )}
+    </div>
   );
 };
 
