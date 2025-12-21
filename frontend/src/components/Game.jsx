@@ -493,9 +493,9 @@ const Game = () => {
         this.physics.pause();
         
         // Stop timers
-        this.obstacleTimer?.destroy();
-        this.coinTimer?.destroy();
-        this.difficultyTimer?.destroy();
+        if (this.obstacleTimer) this.obstacleTimer.destroy();
+        if (this.coinTimer) this.coinTimer.destroy();
+        if (this.difficultyTimer) this.difficultyTimer.destroy();
         
         // Player death effect
         this.player.setTint(0xff0000);
@@ -676,16 +676,24 @@ const Game = () => {
       }
 
       // ============================================================
-      // PAUSE/RESUME
+      // PAUSE/RESUME - FIXED
       // ============================================================
       pauseGame() {
         if (!this.started || this.gameOver) return;
         
         this.isPaused = true;
         this.physics.pause();
-        this.obstacleTimer?.paused = true;
-        this.coinTimer?.paused = true;
-        this.difficultyTimer?.paused = true;
+        
+        // Fix: Check if timers exist before pausing
+        if (this.obstacleTimer) {
+          this.obstacleTimer.paused = true;
+        }
+        if (this.coinTimer) {
+          this.coinTimer.paused = true;
+        }
+        if (this.difficultyTimer) {
+          this.difficultyTimer.paused = true;
+        }
       }
 
       resumeGame() {
@@ -693,9 +701,17 @@ const Game = () => {
         
         this.isPaused = false;
         this.physics.resume();
-        this.obstacleTimer.paused = false;
-        this.coinTimer.paused = false;
-        this.difficultyTimer.paused = false;
+        
+        // Fix: Check if timers exist before resuming
+        if (this.obstacleTimer) {
+          this.obstacleTimer.paused = false;
+        }
+        if (this.coinTimer) {
+          this.coinTimer.paused = false;
+        }
+        if (this.difficultyTimer) {
+          this.difficultyTimer.paused = false;
+        }
       }
     }
 
