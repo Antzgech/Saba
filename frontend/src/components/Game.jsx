@@ -1,178 +1,151 @@
-import React, { useEffect, useRef } from 'react';
-import Phaser from 'phaser';
-import { gameAPI } from '../services/api';
+import React, { useEffect, useRef } from "react";
+import Phaser from "phaser";
 
 const Game = () => {
   const gameRef = useRef(null);
-  const containerRef = useRef(null);
 
   useEffect(() => {
-    if (gameRef.current) return; // prevent multiple inits
-
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    if (gameRef.current) return;
 
     class MainScene extends Phaser.Scene {
       constructor() {
-        super('MainScene');
+        super("MainScene");
+        this.player = null;
+        this.ground = null;
         this.score = 0;
         this.scoreText = null;
-        this.player = null;
-        this.platforms = null;
-        this.coins = null;
-        this.isGameOver = false;
+        this.gameOver = false;
       }
 
       preload() {
-        // Simple shapes; could be replaced by sprites later
+        // Placeholder colors — ready for real assets
+        this.load.image("bg", "https://dummyimage.com/600x400/0a1a2f/ffffff");
+        this.load.image("player", "https://dummyimage.com/50x50/00ff00/000000");
+        this.load.image("obstacle", "https://dummyimage.com/40x60/ff0000/000000");
+        this.load.image("coin", "https://dummyimage.com/30x30/f4d03f/000000");
       }
 
       create() {
-        // Background color
-        this.cameras.main.setBackgroundColor('#0A1A2F');
+        const { width, height } = this.scale;
 
-        // Ground/platform group
-        this.platforms = this.physics.add.staticGroup();
-        this.platforms.create(width / 2, height - 40, 'ground')
-          .setScale(2)
-          .refreshBody()
-          .setSize(width, 40)
-          .setOffset(0, 0);
+        // Background
+        this.add.image(0, 0, "bg")
+          .setOrigin(0, 0)
+          .setDisplaySize(width, height);
+
+        // Ground FIRST (fixes falling glitch)
+        this.ground = this.physics.add.staticGroup();
+        this.ground.create(0, height - 40, "bg")
+          .setOrigin(0, 0)
+          .setDisplaySize(width, 40)
+          .refreshBody();
 
         // Player
-        this.player = this.physics.add.sprite(80, height - 100, 'player');
-        this.player.setDisplaySize(32, 32);
+        this.player = this.physics.add.sprite(100, height - 120, "player");
         this.player.setCollideWorldBounds(true);
-        this.player.body.setGravityY(600);
+        this.player.setGravityY(900);
 
-        // Auto‑run
-        this.player.body.setVelocityX(180);
+        this.physics.add.collider(this.player, this.ground);
 
         // Score text
-        this.scoreText = this.add.text(16, 16, 'Score: 0', {
-          fontSize: '18px',
-          fontFamily: 'system-ui, sans-serif',
-          color: '#F5D27C'
+        this.scoreText = this.add.text(20, 20, "Score: 0", {
+          fontSize: "24px",
+          fill: "#FFD700",
         });
 
-        // Coins group
+        // Input
+        this.input.on("pointerdown", () => {
+          if (!this.gameOver && this.player.body.touching.down) {
+            this.player.setVelocityY(-450);
+          }
+        });
+
+        // Groups
+        this.obstacles = this.physics.add.group();
         this.coins = this.physics.add.group();
 
         // Collisions
-        this.physics.add.collider(this.player, this.platforms);
+        this.physics.add.collider(this.obstacles, this.ground);
         this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
+        this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
 
-        // Spawn coins periodically
+        // Timers
         this.time.addEvent({
-          delay: 800,
-          callback: this.spawnCoin,
-          callbackScope: this,
-          loop: true
-        });
-
-        // Spawn obstacles
-        this.obstacles = this.physics.add.group();
-        this.physics.add.collider(this.player, this.obstacles, this.hitObstacle, null, this);
-
-        this.time.addEvent({
-          delay: 1400,
+          delay: 1500,
           callback: this.spawnObstacle,
           callbackScope: this,
-          loop: true
+          loop: true,
         });
 
-        // Jump on tap/click
-        this.input.on('pointerdown', () => {
-          if (this.isGameOver) return;
-          if (this.player.body.touching.down) {
-            this.player.setVelocityY(-420);
-          }
+        this.time.addEvent({
+          delay: 1200,
+          callback: this.spawnCoin,
+          callbackScope: this,
+          loop: true,
         });
-      }
-
-      spawnCoin() {
-        if (this.isGameOver) return;
-        const y = Phaser.Math.Between(height - 200, height - 120);
-        const coin = this.coins.create(width + 20, y, 'coin');
-        coin.setDisplaySize(18, 18);
-        coin.body.setAllowGravity(false);
-        coin.setVelocityX(-200);
-        coin.checkWorldBounds = true;
-        coin.outOfBoundsKill = true;
       }
 
       spawnObstacle() {
-        if (this.isGameOver) return;
-        const obstacle = this.obstacles.create(width + 20, height - 70, 'obstacle');
-        obstacle.setDisplaySize(24, 40);
-        obstacle.body.setAllowGravity(false);
-        obstacle.setVelocityX(-200);
-        obstacle.checkWorldBounds = true;
-        obstacle.outOfBoundsKill = true;
+        if (this.gameOver) return;
+
+        const { width, height } = this.scale;
+        const obstacle = this.obstacles.create(width + 50, height - 80, "obstacle");
+        obstacle.setVelocityX(-250);
+        obstacle.setImmovable(true);
+      }
+
+      spawnCoin() {
+        if (this.gameOver) return;
+
+        const { width } = this.scale;
+        const y = Phaser.Math.Between(150, 350);
+        const coin = this.coins.create(width + 50, y, "coin");
+        coin.setVelocityX(-200);
       }
 
       collectCoin(player, coin) {
         coin.destroy();
-        this.score += 1;
-        this.scoreText.setText('Score: ' + this.score);
+        this.score += 10;
+        this.scoreText.setText("Score: " + this.score);
       }
 
-      async hitObstacle() {
-        if (this.isGameOver) return;
-        this.isGameOver = true;
+      hitObstacle() {
+        if (this.gameOver) return;
 
+        this.gameOver = true;
         this.physics.pause();
         this.player.setTint(0xff0000);
 
-        // Show game over text
-        this.add.text(width / 2, height / 2 - 20, 'Trial Complete', {
-          fontSize: '24px',
-          fontFamily: 'system-ui, sans-serif',
-          color: '#F5D27C'
-        }).setOrigin(0.5);
-
-        this.add.text(width / 2, height / 2 + 20, `Score: ${this.score}`, {
-          fontSize: '18px',
-          fontFamily: 'system-ui, sans-serif',
-          color: '#FFFFFF'
-        }).setOrigin(0.5);
-
-        // Send score to backend
-        try {
-          await gameAPI.submitScore({ score: this.score });
-        } catch (e) {
-          console.error('Failed to submit score', e);
-        }
-
-        // Optionally: return to dashboard after delay
-        this.time.delayedCall(2000, () => {
-          window.history.back();
+        this.time.delayedCall(1200, () => {
+          window.location.href = "/dashboard";
         });
       }
 
       update() {
-        if (this.isGameOver) return;
+        // Remove off‑screen objects
+        this.obstacles.children.iterate((o) => {
+          if (o && o.x < -50) o.destroy();
+        });
 
-        // Keep player roughly at same x, world scrolls via objects
-        if (this.player.x < 80) {
-          this.player.x = 80;
-        }
+        this.coins.children.iterate((c) => {
+          if (c && c.x < -50) c.destroy();
+        });
       }
     }
 
     const config = {
       type: Phaser.AUTO,
-      width,
-      height,
-      parent: containerRef.current,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      parent: "phaser-container",
       physics: {
-        default: 'arcade',
+        default: "arcade",
         arcade: {
           gravity: { y: 0 },
-          debug: false
-        }
+          debug: false,
+        },
       },
-      scene: [MainScene]
+      scene: MainScene,
     };
 
     gameRef.current = new Phaser.Game(config);
@@ -185,11 +158,7 @@ const Game = () => {
     };
   }, []);
 
-  return (
-    <div className="w-full h-full">
-      <div ref={containerRef} className="w-full h-full" />
-    </div>
-  );
+  return <div id="phaser-container" className="w-full h-full"></div>;
 };
 
 export default Game;
