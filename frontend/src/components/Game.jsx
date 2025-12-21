@@ -11,65 +11,128 @@ const Game = () => {
       constructor() {
         super("MainScene");
         this.player = null;
-        this.ground = null;
         this.score = 0;
         this.scoreText = null;
         this.gameOver = false;
+        this.started = false;
       }
 
       preload() {
-        // Placeholder colors — ready for real assets
-        this.load.image("bg", "https://dummyimage.com/600x400/0a1a2f/ffffff");
-        this.load.image("player", "https://dummyimage.com/50x50/00ff00/000000");
-        this.load.image("obstacle", "https://dummyimage.com/40x60/ff0000/000000");
-        this.load.image("coin", "https://dummyimage.com/30x30/f4d03f/000000");
+        // Background layers (parallax)
+        this.load.image("bg1", "/assets/bg-sheba-desert.png");
+        this.load.image("bg2", "/assets/bg-sheba-city.png");
+
+        // Player + FX
+        this.load.image("player", "/assets/player-guardian.png");
+        this.load.image("dust", "/assets/dust.png");
+
+        // Objects
+        this.load.image("coin", "/assets/coin-gold.png");
+        this.load.image("obstacle", "/assets/obstacle-pillar.png");
+
+        // UI
+        this.load.image("banner", "/assets/ui-banner.png");
+        this.load.image("button", "/assets/ui-button.png");
       }
 
       create() {
         const { width, height } = this.scale;
 
-        // Background
-        this.add.image(0, 0, "bg")
-          .setOrigin(0, 0)
-          .setDisplaySize(width, height);
+        // Fade in
+        this.cameras.main.fadeIn(600);
 
-        // Ground FIRST (fixes falling glitch)
+        // Parallax background
+        this.bg1 = this.add.tileSprite(0, 0, width, height, "bg1").setOrigin(0);
+        this.bg2 = this.add.tileSprite(0, 0, width, height, "bg2").setOrigin(0).setAlpha(0.7);
+
+        // Ground
         this.ground = this.physics.add.staticGroup();
-        this.ground.create(0, height - 40, "bg")
+        this.ground
+          .create(0, height - 40, "bg1")
           .setOrigin(0, 0)
           .setDisplaySize(width, 40)
           .refreshBody();
 
         // Player
-        this.player = this.physics.add.sprite(100, height - 120, "player");
-        this.player.setCollideWorldBounds(true);
+        this.player = this.physics.add.sprite(120, height - 120, "player");
         this.player.setGravityY(900);
+        this.player.setCollideWorldBounds(true);
 
         this.physics.add.collider(this.player, this.ground);
 
-        // Score text
-        this.scoreText = this.add.text(20, 20, "Score: 0", {
-          fontSize: "24px",
-          fill: "#FFD700",
+        // Dust trail
+        this.dust = this.add.particles("dust");
+        this.dustEmitter = this.dust.createEmitter({
+          x: this.player.x - 20,
+          y: this.player.y + 20,
+          speedX: { min: -50, max: -150 },
+          speedY: { min: -10, max: 10 },
+          scale: { start: 0.4, end: 0 },
+          lifespan: 300,
+          quantity: 0,
         });
 
-        // Input
-        this.input.on("pointerdown", () => {
-          if (!this.gameOver && this.player.body.touching.down) {
-            this.player.setVelocityY(-450);
-          }
-        });
+        // Score banner
+        this.add.image(width / 2, 50, "banner").setScale(0.6);
+        this.scoreText = this.add.text(width / 2, 50, "0", {
+          fontSize: "28px",
+          color: "#FFD700",
+          fontFamily: "serif",
+        }).setOrigin(0.5);
 
         // Groups
         this.obstacles = this.physics.add.group();
         this.coins = this.physics.add.group();
 
         // Collisions
-        this.physics.add.collider(this.obstacles, this.ground);
         this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
         this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
 
-        // Timers
+        // Intro screen
+        this.showIntro();
+      }
+
+      showIntro() {
+        const { width, height } = this.scale;
+
+        this.introText = this.add.text(width / 2, height / 2 - 40,
+          "Trial of the Queen",
+          {
+            fontSize: "42px",
+            color: "#FFD700",
+            fontFamily: "serif",
+          }
+        ).setOrigin(0.5);
+
+        this.startButton = this.add.image(width / 2, height / 2 + 40, "button")
+          .setInteractive()
+          .setScale(0.7);
+
+        this.startLabel = this.add.text(width / 2, height / 2 + 40,
+          "Begin Trial",
+          {
+            fontSize: "22px",
+            color: "#000",
+            fontFamily: "serif",
+          }
+        ).setOrigin(0.5);
+
+        this.startButton.on("pointerdown", () => {
+          this.startTrial();
+        });
+      }
+
+      startTrial() {
+        this.started = true;
+
+        this.introText.destroy();
+        this.startButton.destroy();
+        this.startLabel.destroy();
+
+        // Start dust trail
+        this.dustEmitter.setQuantity(2);
+
+        // Spawn loops
         this.time.addEvent({
           delay: 1500,
           callback: this.spawnObstacle,
@@ -86,27 +149,27 @@ const Game = () => {
       }
 
       spawnObstacle() {
-        if (this.gameOver) return;
+        if (!this.started || this.gameOver) return;
 
         const { width, height } = this.scale;
-        const obstacle = this.obstacles.create(width + 50, height - 80, "obstacle");
-        obstacle.setVelocityX(-250);
-        obstacle.setImmovable(true);
+        const obs = this.obstacles.create(width + 50, height - 80, "obstacle");
+        obs.setVelocityX(-260);
+        obs.setImmovable(true);
       }
 
       spawnCoin() {
-        if (this.gameOver) return;
+        if (!this.started || this.gameOver) return;
 
         const { width } = this.scale;
         const y = Phaser.Math.Between(150, 350);
         const coin = this.coins.create(width + 50, y, "coin");
-        coin.setVelocityX(-200);
+        coin.setVelocityX(-220);
       }
 
       collectCoin(player, coin) {
         coin.destroy();
         this.score += 10;
-        this.scoreText.setText("Score: " + this.score);
+        this.scoreText.setText(this.score);
       }
 
       hitObstacle() {
@@ -116,13 +179,30 @@ const Game = () => {
         this.physics.pause();
         this.player.setTint(0xff0000);
 
-        this.time.delayedCall(1200, () => {
+        this.showGameOver();
+      }
+
+      showGameOver() {
+        const { width, height } = this.scale;
+
+        this.cameras.main.fadeOut(800);
+
+        this.time.delayedCall(900, () => {
           window.location.href = "/dashboard";
         });
       }
 
       update() {
-        // Remove off‑screen objects
+        if (!this.started || this.gameOver) return;
+
+        // Parallax scroll
+        this.bg1.tilePositionX += 1.2;
+        this.bg2.tilePositionX += 0.6;
+
+        // Dust follows player
+        this.dustEmitter.setPosition(this.player.x - 20, this.player.y + 20);
+
+        // Remove off-screen objects
         this.obstacles.children.iterate((o) => {
           if (o && o.x < -50) o.destroy();
         });
