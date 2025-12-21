@@ -1,126 +1,164 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import { useAuthStore } from './store';
+import React, { useEffect, useRef } from "react";
+import Phaser from "phaser";
 
-// Pages
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Leaderboard from './pages/Leaderboard';
-import Game from './components/Game';
-import Social from './pages/Social';
-import Referrals from './pages/Referrals';
-import Profile from './pages/Profile';
-
-// Layout
-import Navbar from './components/Navbar';
-
-const ProtectedRoute = ({ children }) => {
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
-  return isAuthenticated ? children : <Navigate to="/" />;
-};
-
-// Layout wrapper for all authenticated pages
-const ArenaLayout = ({ children }) => {
-  return (
-    <div className="min-h-screen bg-dark-900">
-      <Navbar />
-      <div className="pb-20">{children}</div> {/* space for bottom nav */}
-    </div>
-  );
-};
-
-function App() {
-  const loginWithToken = useAuthStore(state => state.loginWithToken);
+const Game = () => {
+  const gameRef = useRef(null);
 
   useEffect(() => {
-    setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get("token");
+    if (gameRef.current) return;
 
-      if (token) {
-        loginWithToken(token);
+    class MainScene extends Phaser.Scene {
+      constructor() {
+        super("MainScene");
+        this.player = null;
+        this.ground = null;
+        this.score = 0;
+        this.scoreText = null;
+        this.gameOver = false;
       }
-    }, 300);
-  }, [loginWithToken]);
 
-  return (
-    <Router>
-      <Toaster position="top-right" />
+      preload() {
+        // Placeholder colors — ready for real assets
+        this.load.image("bg", "https://dummyimage.com/600x400/0a1a2f/ffffff");
+        this.load.image("player", "https://dummyimage.com/50x50/00ff00/000000");
+        this.load.image("obstacle", "https://dummyimage.com/40x60/ff0000/000000");
+        this.load.image("coin", "https://dummyimage.com/30x30/f4d03f/000000");
+      }
 
-      <Routes>
-        {/* Public Route */}
-        <Route path="/" element={<Login />} />
+      create() {
+        const { width, height } = this.scale;
 
-        {/* Protected Routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <ArenaLayout>
-                <Dashboard />
-              </ArenaLayout>
-            </ProtectedRoute>
+        // Background
+        this.add.image(0, 0, "bg")
+          .setOrigin(0, 0)
+          .setDisplaySize(width, height);
+
+        // Ground FIRST (fixes falling glitch)
+        this.ground = this.physics.add.staticGroup();
+        this.ground.create(0, height - 40, "bg")
+          .setOrigin(0, 0)
+          .setDisplaySize(width, 40)
+          .refreshBody();
+
+        // Player
+        this.player = this.physics.add.sprite(100, height - 120, "player");
+        this.player.setCollideWorldBounds(true);
+        this.player.setGravityY(900);
+
+        this.physics.add.collider(this.player, this.ground);
+
+        // Score text
+        this.scoreText = this.add.text(20, 20, "Score: 0", {
+          fontSize: "24px",
+          fill: "#FFD700",
+        });
+
+        // Input
+        this.input.on("pointerdown", () => {
+          if (!this.gameOver && this.player.body.touching.down) {
+            this.player.setVelocityY(-450);
           }
-        />
+        });
 
-        <Route
-          path="/game"
-          element={
-            <ProtectedRoute>
-              <ArenaLayout>
-                <Game />
-              </ArenaLayout>
-            </ProtectedRoute>
-          }
-        />
+        // Groups
+        this.obstacles = this.physics.add.group();
+        this.coins = this.physics.add.group();
 
-        <Route
-          path="/leaderboard"
-          element={
-            <ProtectedRoute>
-              <ArenaLayout>
-                <Leaderboard />
-              </ArenaLayout>
-            </ProtectedRoute>
-          }
-        />
+        // Collisions
+        this.physics.add.collider(this.obstacles, this.ground);
+        this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
+        this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
 
-        <Route
-          path="/social"
-          element={
-            <ProtectedRoute>
-              <ArenaLayout>
-                <Social />
-              </ArenaLayout>
-            </ProtectedRoute>
-          }
-        />
+        // Timers
+        this.time.addEvent({
+          delay: 1500,
+          callback: this.spawnObstacle,
+          callbackScope: this,
+          loop: true,
+        });
 
-        <Route
-          path="/referrals"
-          element={
-            <ProtectedRoute>
-              <ArenaLayout>
-                <Referrals />
-              </ArenaLayout>
-            </ProtectedRoute>
-          }
-        />
+        this.time.addEvent({
+          delay: 1200,
+          callback: this.spawnCoin,
+          callbackScope: this,
+          loop: true,
+        });
+      }
 
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <ArenaLayout>
-                <Profile />
-              </ArenaLayout>
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
-  );
-}
+      spawnObstacle() {
+        if (this.gameOver) return;
 
-export default App;
+        const { width, height } = this.scale;
+        const obstacle = this.obstacles.create(width + 50, height - 80, "obstacle");
+        obstacle.setVelocityX(-250);
+        obstacle.setImmovable(true);
+      }
+
+      spawnCoin() {
+        if (this.gameOver) return;
+
+        const { width } = this.scale;
+        const y = Phaser.Math.Between(150, 350);
+        const coin = this.coins.create(width + 50, y, "coin");
+        coin.setVelocityX(-200);
+      }
+
+      collectCoin(player, coin) {
+        coin.destroy();
+        this.score += 10;
+        this.scoreText.setText("Score: " + this.score);
+      }
+
+      hitObstacle() {
+        if (this.gameOver) return;
+
+        this.gameOver = true;
+        this.physics.pause();
+        this.player.setTint(0xff0000);
+
+        this.time.delayedCall(1200, () => {
+          window.location.href = "/dashboard";
+        });
+      }
+
+      update() {
+        // Remove off‑screen objects
+        this.obstacles.children.iterate((o) => {
+          if (o && o.x < -50) o.destroy();
+        });
+
+        this.coins.children.iterate((c) => {
+          if (c && c.x < -50) c.destroy();
+        });
+      }
+    }
+
+    const config = {
+      type: Phaser.AUTO,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      parent: "phaser-container",
+      physics: {
+        default: "arcade",
+        arcade: {
+          gravity: { y: 0 },
+          debug: false,
+        },
+      },
+      scene: MainScene,
+    };
+
+    gameRef.current = new Phaser.Game(config);
+
+    return () => {
+      if (gameRef.current) {
+        gameRef.current.destroy(true);
+        gameRef.current = null;
+      }
+    };
+  }, []);
+
+  return <div id="phaser-container" className="w-full h-full"></div>;
+};
+
+export default Game;
