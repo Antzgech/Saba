@@ -1,123 +1,95 @@
 import React, { useEffect, useState } from 'react';
 import { leaderboardAPI } from '../services/api';
-import { Trophy, Medal } from 'lucide-react';
+import { useAuthStore } from '../store';
 
 const Leaderboard = () => {
-  const [leaderboards, setLeaderboards] = useState({});
-  const [selectedLevel, setSelectedLevel] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuthStore();
+  const [monthly, setMonthly] = useState([]);
+  const [userRank, setUserRank] = useState(null);
 
   useEffect(() => {
-    const fetchLeaderboards = async () => {
+    const loadLeaderboard = async () => {
       try {
-        const response = await leaderboardAPI.getAllLevels();
-        setLeaderboards(response.data.data);
-      } catch (error) {
-        console.error('Error fetching leaderboards:', error);
-      } finally {
-        setLoading(false);
+        const [monthlyRes, rankRes] = await Promise.all([
+          leaderboardAPI.getMonthlyLeaderboard(),
+          leaderboardAPI.getUserRank(),
+        ]);
+
+        setMonthly(monthlyRes.data.data || []);
+        setUserRank(rankRes.data.data || null);
+      } catch (err) {
+        console.error("Failed to load leaderboard:", err);
       }
     };
-    
-    fetchLeaderboards();
+
+    loadLeaderboard();
   }, []);
 
-  const getRankColor = (rank) => {
-    if (rank === 1) return 'text-yellow-400';
-    if (rank === 2) return 'text-gray-300';
-    if (rank === 3) return 'text-orange-400';
-    return 'text-gray-400';
-  };
-
-  const getRankIcon = (rank) => {
-    if (rank <= 3) return <Trophy className={`w-5 h-5 ${getRankColor(rank)}`} />;
-    return <Medal className="w-5 h-5 text-gray-500" />;
-  };
-
-  const currentLeaderboard = leaderboards[`level${selectedLevel}`] || [];
-
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-4xl font-display font-bold mb-8 gradient-text">🏆 Leaderboard</h1>
+    <div className="min-h-screen px-4 py-6 bg-gradient-to-b from-[#0A1A2F] to-[#0D0D0D] text-white">
 
-      <div className="flex gap-2 mb-6">
-        {[1, 2, 3].map(level => (
-          <button
-            key={level}
-            onClick={() => setSelectedLevel(level)}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all ${
-              selectedLevel === level
-                ? 'bg-primary-600 text-white'
-                : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
-            }`}
-          >
-            Level {level}
-          </button>
-        ))}
-      </div>
+      {/* Header */}
+      <h1 className="text-3xl font-semibold text-gold-400 mb-2">
+        Tournament Ladder
+      </h1>
+      <p className="text-gray-300 mb-6">
+        The Queen watches closely. Rise through the ranks.
+      </p>
 
-      <div className="card">
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="spinner"></div>
+      {/* User Rank */}
+      {userRank && (
+        <div className="bg-[#112233]/40 border border-[#D4A857]/20 rounded-2xl p-5 mb-8 shadow-lg">
+          <div className="text-sm text-gray-300 mb-1">Your Position</div>
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-semibold text-gold-400">
+                {user?.firstName || user?.username}
+              </div>
+              <div className="text-gray-300 text-sm">Rank #{userRank.rank}</div>
+            </div>
+
+            <div className="text-gold-400 font-bold text-xl">
+              {userRank.totalPoints} pts
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Monthly Leaderboard */}
+      <div className="bg-[#112233]/40 border border-[#D4A857]/20 rounded-2xl p-6 shadow-lg">
+        <h2 className="text-xl font-semibold text-gold-400 mb-4">
+          Monthly Top Players
+        </h2>
+
+        {monthly.length === 0 ? (
+          <div className="text-gray-400">Loading leaderboard...</div>
         ) : (
           <div className="space-y-3">
-            {currentLeaderboard.map((user) => (
+            {monthly.map((player, i) => (
               <div
-                key={user.id}
-                className="flex items-center gap-4 p-4 bg-dark-700 rounded-xl hover:bg-dark-600 transition-colors"
+                key={i}
+                className="flex justify-between items-center bg-[#1A2A3A] p-3 rounded-xl border border-[#D4A857]/20"
               >
-                <div className="flex items-center justify-center w-12">
-                  {getRankIcon(user.rank)}
-                </div>
-                <div className="flex-shrink-0">
-                  {user.photoUrl ? (
-                    <img
-                      src={user.photoUrl}
-                      alt={user.username}
-                      className="w-12 h-12 rounded-full"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold">
-                      {(user.firstName || user.username || 'U')[0].toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="font-semibold">
-                    {user.firstName || user.username || 'Anonymous'}
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-[#0A1A2F] rounded-lg flex items-center justify-center text-gold-400 font-bold">
+                    {i + 1}
                   </div>
-                  <div className="text-sm text-gray-400">
-                    {user.totalPoints} points
+
+                  <div>
+                    <div className="font-medium">{player.firstName || player.username}</div>
+                    <div className="text-xs text-gray-400">#{player.rank}</div>
                   </div>
                 </div>
-                <div className={`text-2xl font-bold ${getRankColor(user.rank)}`}>
-                  #{user.rank}
+
+                <div className="text-gold-400 font-semibold">
+                  {player.totalPoints} pts
                 </div>
               </div>
             ))}
-            
-            {currentLeaderboard.length === 0 && (
-              <div className="text-center py-12 text-gray-400">
-                No users in this level yet
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      <div className="mt-6 card bg-primary-600/10 border-primary-600/20">
-        <h3 className="font-semibold text-primary-400 mb-2">🎁 Rewards</h3>
-        <p className="text-sm text-gray-300">
-          Top 10 users in each level receive rewards every 15 days!
-        </p>
-        <div className="mt-3 space-y-1 text-sm">
-          <div>• Level 1: $3</div>
-          <div>• Level 2: $8 (cumulative)</div>
-          <div>• Level 3: $18 (cumulative)</div>
-        </div>
-      </div>
     </div>
   );
 };
