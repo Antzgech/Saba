@@ -18,9 +18,8 @@ const Game = () => {
       }
 
       preload() {
-        // Background layers (parallax)
-        this.load.image("bg1", "/assets/bg-sheba-desert.png");
-        this.load.image("bg2", "/assets/bg-sheba-city.png");
+        // Background
+        this.load.image("bg1", "/assets/bg-sheba-temple.png");
 
         // Player + FX
         this.load.image("player", "/assets/player-guardian.png");
@@ -41,14 +40,12 @@ const Game = () => {
         // Fade in
         this.cameras.main.fadeIn(600);
 
-        // Parallax background
+        // Background
         this.bg1 = this.add.tileSprite(0, 0, width, height, "bg1").setOrigin(0);
-        this.bg2 = this.add.tileSprite(0, 0, width, height, "bg2").setOrigin(0).setAlpha(0.7);
 
         // Ground
         this.ground = this.physics.add.staticGroup();
-        this.ground
-          .create(0, height - 40, "bg1")
+        this.ground.create(0, height - 40, "bg1")
           .setOrigin(0, 0)
           .setDisplaySize(width, 40)
           .refreshBody();
@@ -57,7 +54,6 @@ const Game = () => {
         this.player = this.physics.add.sprite(120, height - 120, "player");
         this.player.setGravityY(900);
         this.player.setCollideWorldBounds(true);
-
         this.physics.add.collider(this.player, this.ground);
 
         // Dust trail
@@ -72,7 +68,7 @@ const Game = () => {
           quantity: 0,
         });
 
-        // Score banner
+        // Score UI
         this.add.image(width / 2, 50, "banner").setScale(0.6);
         this.scoreText = this.add.text(width / 2, 50, "0", {
           fontSize: "28px",
@@ -95,27 +91,21 @@ const Game = () => {
       showIntro() {
         const { width, height } = this.scale;
 
-        this.introText = this.add.text(width / 2, height / 2 - 40,
-          "Trial of the Queen",
-          {
-            fontSize: "42px",
-            color: "#FFD700",
-            fontFamily: "serif",
-          }
-        ).setOrigin(0.5);
+        this.introText = this.add.text(width / 2, height / 2 - 40, "Trial of the Queen", {
+          fontSize: "42px",
+          color: "#FFD700",
+          fontFamily: "serif",
+        }).setOrigin(0.5);
 
         this.startButton = this.add.image(width / 2, height / 2 + 40, "button")
           .setInteractive()
           .setScale(0.7);
 
-        this.startLabel = this.add.text(width / 2, height / 2 + 40,
-          "Begin Trial",
-          {
-            fontSize: "22px",
-            color: "#000",
-            fontFamily: "serif",
-          }
-        ).setOrigin(0.5);
+        this.startLabel = this.add.text(width / 2, height / 2 + 40, "Begin Trial", {
+          fontSize: "22px",
+          color: "#000",
+          fontFamily: "serif",
+        }).setOrigin(0.5);
 
         this.startButton.on("pointerdown", () => {
           this.startTrial();
@@ -129,10 +119,8 @@ const Game = () => {
         this.startButton.destroy();
         this.startLabel.destroy();
 
-        // Start dust trail
         this.dustEmitter.setQuantity(2);
 
-        // Spawn loops
         this.time.addEvent({
           delay: 1500,
           callback: this.spawnObstacle,
@@ -178,15 +166,12 @@ const Game = () => {
         this.gameOver = true;
         this.physics.pause();
         this.player.setTint(0xff0000);
-
         this.showGameOver();
       }
 
       showGameOver() {
         const { width, height } = this.scale;
-
         this.cameras.main.fadeOut(800);
-
         this.time.delayedCall(900, () => {
           window.location.href = "/dashboard";
         });
@@ -195,14 +180,9 @@ const Game = () => {
       update() {
         if (!this.started || this.gameOver) return;
 
-        // Parallax scroll
         this.bg1.tilePositionX += 1.2;
-        this.bg2.tilePositionX += 0.6;
-
-        // Dust follows player
         this.dustEmitter.setPosition(this.player.x - 20, this.player.y + 20);
 
-        // Remove off-screen objects
         this.obstacles.children.iterate((o) => {
           if (o && o.x < -50) o.destroy();
         });
