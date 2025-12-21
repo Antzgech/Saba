@@ -1,33 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { tasksAPI } from '../services/api';
+import { socialAPI } from '../services/api';
 import { Link } from 'react-router-dom';
 
 const Social = () => {
-  const [tasks, setTasks] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [status, setStatus] = useState({});
 
   useEffect(() => {
-    const loadTasks = async () => {
+    const loadData = async () => {
       try {
-        const res = await tasksAPI.getTasks();
-        setTasks(res.data.data || []);
+        const res = await socialAPI.getChannels();
+        setChannels(res.data.data || []);
+
+        const statusRes = await socialAPI.getStatus();
+        setStatus(statusRes.data.data || {});
       } catch (err) {
-        console.error("Failed to load tasks:", err);
+        console.error("Failed to load social tasks:", err);
       }
     };
 
-    loadTasks();
+    loadData();
   }, []);
 
-  const completeTask = async (taskId) => {
+  const verify = async (platform) => {
     try {
-      await tasksAPI.completeTask(taskId);
-      setTasks(prev =>
-        prev.map(t =>
-          t.id === taskId ? { ...t, status: "completed" } : t
-        )
-      );
+      await socialAPI.verifySubscription({ platform });
+      setStatus(prev => ({ ...prev, [platform]: true }));
     } catch (err) {
-      console.error("Failed to complete task:", err);
+      console.error("Verification failed:", err);
     }
   };
 
@@ -36,47 +36,47 @@ const Social = () => {
 
       {/* Header */}
       <h1 className="text-3xl font-semibold text-gold-400 mb-2">
-        Quest Board
+        Social Quests
       </h1>
       <p className="text-gray-300 mb-6">
-        Complete tasks to earn the Queen’s favor.
+        Join channels to earn the Queen’s favor.
       </p>
 
-      {/* Task List */}
+      {/* Channel List */}
       <div className="space-y-4">
-        {tasks.length === 0 && (
-          <div className="text-gray-400">Loading tasks...</div>
+        {channels.length === 0 && (
+          <div className="text-gray-400">Loading social quests...</div>
         )}
 
-        {tasks.map(task => (
+        {channels.map(channel => (
           <div
-            key={task.id}
+            key={channel.platform}
             className="bg-[#112233]/40 border border-[#D4A857]/20 rounded-2xl p-5 shadow-lg"
           >
             <div className="flex justify-between items-start">
               <div>
                 <div className="text-lg font-semibold text-gold-400">
-                  {task.title}
+                  {channel.title}
                 </div>
                 <div className="text-gray-300 text-sm mt-1">
-                  {task.description}
+                  {channel.description}
                 </div>
                 <div className="text-gold-400 text-sm mt-2">
-                  +{task.rewardPoints} points
+                  +{channel.rewardPoints} points
                 </div>
               </div>
 
               <div>
-                {task.status === "completed" ? (
+                {status[channel.platform] ? (
                   <div className="text-green-400 font-semibold">
                     Completed
                   </div>
                 ) : (
                   <button
-                    onClick={() => completeTask(task.id)}
+                    onClick={() => verify(channel.platform)}
                     className="bg-gold-400 text-black font-semibold px-4 py-2 rounded-xl"
                   >
-                    Complete
+                    Verify
                   </button>
                 )}
               </div>
