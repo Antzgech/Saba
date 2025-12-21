@@ -9,7 +9,6 @@ import obstaclePillar from "../assets/obstacle-pillar.png";
 import uiFrame from "../assets/ui-frame.png";
 import uiButton from "../assets/ui-button.png";
 import uiBanner from "../assets/ui-banner.png";
-import dustImg from "../assets/dust.png"; // optional particle image
 
 const Game = () => {
   const gameRef = useRef(null);
@@ -27,14 +26,13 @@ const Game = () => {
         this.started = false;
         this.obstacles = null;
         this.coins = null;
-        this.dust = null;
         this.dustEmitter = null;
         this.retryButton = null;
         this.dashboardButton = null;
       }
 
       preload() {
-        // Images loaded from imported modules
+        // load images imported above
         this.load.image("bg1", bgShebaTemple);
         this.load.image("player", playerGuardian);
         this.load.image("coin", coinGold);
@@ -42,27 +40,38 @@ const Game = () => {
         this.load.image("frame", uiFrame);
         this.load.image("button", uiButton);
         this.load.image("banner", uiBanner);
-        this.load.image("dust", dustImg);
       }
 
       create() {
         const { width, height } = this.scale;
 
+        // Set a pleasant sky-blue background color behind everything
+        this.cameras.main.setBackgroundColor("#87CEEB");
+
+        // Create a small circular dust texture at runtime (12x12)
+        const g = this.add.graphics();
+        g.fillStyle(0xC2A16B, 1);
+        g.fillCircle(6, 6, 5);
+        g.generateTexture("dust", 12, 12);
+        g.destroy();
+
         // Fade in
         this.cameras.main.fadeIn(600);
 
-        // Background (parallax-ready)
+        // Background tile (parallax-ready)
         this.bg1 = this.add.tileSprite(0, 0, width, height, "bg1").setOrigin(0);
 
         // Visible ground (simple rectangle) with static physics body
-        const groundHeight = 48;
-        const groundY = height - groundHeight / 2;
+        // Move ground up so it's clearly visible above any navbar
+        const groundHeight = 64;
+        const groundY = height - 80; // raised so player and ground are visible
         this.ground = this.add.rectangle(width / 2, groundY, width, groundHeight, 0x8b5a2b);
         this.physics.add.existing(this.ground, true); // static body
 
         // Player (scaled, gravity disabled until start)
-        const playerScale = 0.5;
-        this.player = this.physics.add.sprite(120, height - 120, "player").setScale(playerScale);
+        const playerScale = 0.45;
+        // Place player slightly above ground so it's visible and not overlapped by navbar
+        this.player = this.physics.add.sprite(120, groundY - 48, "player").setScale(playerScale);
         this.player.setCollideWorldBounds(true);
         this.player.body.allowGravity = false; // prevent falling before start
         this.physics.add.collider(this.player, this.ground);
@@ -79,12 +88,16 @@ const Game = () => {
           quantity: 0,
         });
 
-        // Score UI
-        this.add.image(width / 2, 50, "banner").setScale(0.6);
-        this.scoreText = this.add.text(width / 2, 50, "0", {
-          fontSize: "28px",
+        // Score UI (frame + banner + text)
+        const frameX = width - 140;
+        const frameY = 48;
+        this.add.image(frameX, frameY, "frame").setScale(0.6);
+        this.add.image(frameX, frameY, "banner").setScale(0.45);
+        this.scoreText = this.add.text(frameX, frameY, "0", {
+          fontSize: "22px",
           color: "#FFD700",
           fontFamily: "serif",
+          fontStyle: "bold",
         }).setOrigin(0.5);
 
         // Groups
@@ -99,30 +112,46 @@ const Game = () => {
         this.input.on("pointerdown", this.tryJump, this);
         this.input.keyboard.on("keydown-SPACE", this.tryJump, this);
 
-        // Intro screen
+        // Intro screen with a clear Play button
         this.showIntro();
       }
 
       showIntro() {
         const { width, height } = this.scale;
 
-        this.introText = this.add.text(width / 2, height / 2 - 40, "Trial of the Queen", {
-          fontSize: "42px",
+        // Semi-transparent overlay to focus the player
+        this.overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.35);
+
+        this.introText = this.add.text(width / 2, height / 2 - 80, "Trial of the Queen", {
+          fontSize: "48px",
           color: "#FFD700",
           fontFamily: "serif",
+          fontStyle: "bold",
+          stroke: "#000000",
+          strokeThickness: 6,
         }).setOrigin(0.5);
 
-        this.startButton = this.add.image(width / 2, height / 2 + 40, "button")
+        // Prominent Play button
+        this.playButton = this.add.image(width / 2, height / 2 + 10, "button")
           .setInteractive()
-          .setScale(0.7);
+          .setScale(1.0)
+          .setDepth(10);
 
-        this.startLabel = this.add.text(width / 2, height / 2 + 40, "Begin Trial", {
-          fontSize: "22px",
+        this.playLabel = this.add.text(width / 2, height / 2 + 10, "Play", {
+          fontSize: "26px",
           color: "#000",
           fontFamily: "serif",
-        }).setOrigin(0.5);
+          fontStyle: "bold",
+        }).setOrigin(0.5).setDepth(11);
 
-        this.startButton.on("pointerdown", () => {
+        // Small hint text
+        this.hintText = this.add.text(width / 2, height / 2 + 70, "Tap or press SPACE to jump", {
+          fontSize: "16px",
+          color: "#ffffff",
+          fontFamily: "sans-serif",
+        }).setOrigin(0.5).setDepth(11);
+
+        this.playButton.on("pointerdown", () => {
           this.startTrial();
         });
       }
@@ -131,9 +160,11 @@ const Game = () => {
         this.started = true;
 
         // Remove intro UI
+        if (this.overlay) this.overlay.destroy();
         if (this.introText) this.introText.destroy();
-        if (this.startButton) this.startButton.destroy();
-        if (this.startLabel) this.startLabel.destroy();
+        if (this.playButton) this.playButton.destroy();
+        if (this.playLabel) this.playLabel.destroy();
+        if (this.hintText) this.hintText.destroy();
 
         // Enable gravity for player
         this.player.body.allowGravity = true;
@@ -144,14 +175,14 @@ const Game = () => {
 
         // Spawn loops
         this.time.addEvent({
-          delay: 1500,
+          delay: 1400,
           callback: this.spawnObstacle,
           callbackScope: this,
           loop: true,
         });
 
         this.time.addEvent({
-          delay: 1200,
+          delay: 1100,
           callback: this.spawnCoin,
           callbackScope: this,
           loop: true,
@@ -171,9 +202,12 @@ const Game = () => {
       spawnObstacle() {
         if (!this.started || this.gameOver) return;
         const { width, height } = this.scale;
-        const scale = Phaser.Math.FloatBetween(0.5, 0.85);
-        const obs = this.obstacles.create(width + 80, height - 80, "obstacle").setScale(scale);
-        obs.setVelocityX(-260);
+        const scale = Phaser.Math.FloatBetween(0.55, 0.95);
+        // Randomize obstacle vertical offset slightly so player must time jumps
+        const baseY = this.ground.y - (this.ground.height / 2);
+        const yOffset = Phaser.Math.Between(-6, 6);
+        const obs = this.obstacles.create(width + 80, baseY + yOffset, "obstacle").setScale(scale);
+        obs.setVelocityX(-300);
         obs.setImmovable(true);
         obs.body.allowGravity = false;
       }
@@ -181,9 +215,11 @@ const Game = () => {
       spawnCoin() {
         if (!this.started || this.gameOver) return;
         const { width } = this.scale;
-        const y = Phaser.Math.Between(150, this.scale.height - 140);
+        const minY = 120;
+        const maxY = this.ground.y - 120;
+        const y = Phaser.Math.Between(minY, Math.max(minY + 10, maxY));
         const coin = this.coins.create(width + 50, y, "coin").setScale(0.28);
-        coin.setVelocityX(-220);
+        coin.setVelocityX(-240);
         coin.body.allowGravity = false;
       }
 
@@ -209,36 +245,42 @@ const Game = () => {
       showGameOverUI() {
         const { width, height } = this.scale;
 
+        // Semi-transparent overlay
+        this.overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.45).setDepth(20);
+
         // Game Over text
-        this.gameOverText = this.add.text(width / 2, height / 2 - 60, "Game Over", {
-          fontSize: "40px",
+        this.gameOverText = this.add.text(width / 2, height / 2 - 80, "Game Over", {
+          fontSize: "44px",
           color: "#ffffff",
           fontFamily: "serif",
-        }).setOrigin(0.5);
+          stroke: "#000000",
+          strokeThickness: 6,
+        }).setOrigin(0.5).setDepth(21);
 
         // Retry button
-        this.retryButton = this.add.image(width / 2, height / 2 + 10, "button")
+        this.retryButton = this.add.image(width / 2, height / 2 - 10, "button")
           .setInteractive()
-          .setScale(0.7);
-        this.retryLabel = this.add.text(width / 2, height / 2 + 10, "Retry", {
+          .setScale(0.9)
+          .setDepth(21);
+        this.retryLabel = this.add.text(width / 2, height / 2 - 10, "Retry", {
           fontSize: "20px",
           color: "#000",
           fontFamily: "serif",
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setDepth(22);
 
         // Dashboard button
-        this.dashboardButton = this.add.image(width / 2, height / 2 + 70, "button")
+        this.dashboardButton = this.add.image(width / 2, height / 2 + 50, "button")
           .setInteractive()
-          .setScale(0.7);
-        this.dashboardLabel = this.add.text(width / 2, height / 2 + 70, "Dashboard", {
+          .setScale(0.9)
+          .setDepth(21);
+        this.dashboardLabel = this.add.text(width / 2, height / 2 + 50, "Dashboard", {
           fontSize: "20px",
           color: "#000",
           fontFamily: "serif",
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setDepth(22);
 
         // Button handlers
         this.retryButton.on("pointerdown", () => {
-          // restart scene cleanly
           this.scene.restart();
         });
 
@@ -261,18 +303,18 @@ const Game = () => {
         }
 
         // Parallax scroll
-        this.bg1.tilePositionX += 1.2;
+        this.bg1.tilePositionX += 1.6;
 
         // Dust emitter follows player
         this.dustEmitter.setPosition(this.player.x - 20, this.player.y + 20);
 
         // Clean up off-screen objects
         this.obstacles.children.iterate((o) => {
-          if (o && o.x < -100) o.destroy();
+          if (o && o.x < -150) o.destroy();
         });
 
         this.coins.children.iterate((c) => {
-          if (c && c.x < -100) c.destroy();
+          if (c && c.x < -150) c.destroy();
         });
       }
     }
@@ -302,7 +344,20 @@ const Game = () => {
     };
   }, []);
 
-  return <div id="phaser-container" className="w-full h-full"></div>;
+  // Add top padding so a navbar won't overlap the game canvas content
+  // If your app's navbar height differs, adjust paddingTop accordingly.
+  return (
+    <div
+      id="phaser-container"
+      style={{
+        width: "100%",
+        height: "100vh",
+        paddingTop: "64px", // reserve space for navbar
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}
+    />
+  );
 };
 
 export default Game;
