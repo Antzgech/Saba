@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
 
-const Game = () => {
+const Game = ({ username = "Traveler" }) => {
   const gameRef = useRef(null);
 
   useEffect(() => {
@@ -11,15 +11,22 @@ const Game = () => {
       constructor() {
         super("MainScene");
 
-        this.player = null;
-        this.playerState = "idle"; // idle, run, jump, power
+        this.playerBody = null;      // physics body
+        this.playerEmoji = null;     // visual emoji
+        this.playerState = "idle";   // idle | run | jump | power
+
         this.score = 0;
         this.distance = 0;
         this.level = 1;
         this.powerUnlocked = false;
+        this.isGameOver = false;
 
+        this.startTime = 0;
         this.lastTap = 0;
-        this.tapDelay = 250; // double tap window
+        this.doubleTapWindow = 250; // ms
+
+        this.obstacles = null;
+        this.coins = null;
       }
 
       preload() {}
@@ -27,43 +34,79 @@ const Game = () => {
       create() {
         const { width, height } = this.scale;
 
-        this.cameras.main.setBackgroundColor("#87CEEB");
+        // Sky background
+        this.cameras.main.setBackgroundColor("#E3F2FD");
 
-        // Ground
-        this.ground = this.add.rectangle(width / 2, height - 60, width, 60, 0x8B4513);
+        // Ground (like Chrome Dino)
+        this.ground = this.add.rectangle(width / 2, height - 60, width, 40, 0x8b5a2b);
         this.physics.add.existing(this.ground, true);
 
-        // Player (rectangle)
-        this.player = this.add.rectangle(120, height - 120, 40, 60, 0x000000);
-        this.physics.add.existing(this.player);
-        this.player.body.setGravityY(900);
-        this.player.body.setCollideWorldBounds(true);
-        this.physics.add.collider(this.player, this.ground);
+        // Player physics body (invisible rectangle)
+        this.playerBody = this.add.rectangle(120, height - 120, 40, 60, 0x000000, 0);
+        this.physics.add.existing(this.playerBody);
+        this.playerBody.body.setGravityY(900);
+        this.playerBody.body.setCollideWorldBounds(true);
+        this.physics.add.collider(this.playerBody, this.ground);
+
+        // Player visual emoji
+        this.playerEmoji = this.add.text(this.playerBody.x, this.playerBody.y - 10, "🧍‍♂️", {
+          fontSize: "40px",
+        }).setOrigin(0.5);
+
+        // UI bar (glassy feel)
+        const uiWidth = width * 0.94;
+        this.add.rectangle(width / 2, 40, uiWidth, 56, 0xffffff, 0.25)
+          .setStrokeStyle(2, 0xffffff, 0.4);
+
+        this.usernameText = this.add.text(24, 20, username, {
+          fontSize: "18px",
+          color: "#000",
+          fontFamily: "system-ui, sans-serif",
+        });
+
+        this.scoreText = this.add.text(width / 2 - 60, 20, "Score: 0", {
+          fontSize: "18px",
+          color: "#000",
+        });
+
+        this.levelText = this.add.text(width - 140, 20, "Level: 1", {
+          fontSize: "18px",
+          color: "#000",
+        });
+
+        this.timeText = this.add.text(width / 2 - 60, 42, "Time: 0s", {
+          fontSize: "14px",
+          color: "#000",
+        });
 
         // Groups
         this.obstacles = this.physics.add.group();
         this.coins = this.physics.add.group();
 
-        // UI
-        this.scoreText = this.add.text(20, 20, "Score: 0", { fontSize: "20px", color: "#000" });
-        this.distanceText = this.add.text(20, 50, "Distance: 0m", { fontSize: "20px", color: "#000" });
-        this.levelText = this.add.text(20, 80, "Level: 1", { fontSize: "20px", color: "#000" });
-
         // Input
         this.input.on("pointerdown", this.handleTap, this);
         this.input.keyboard.on("keydown-SPACE", this.jump, this);
 
-        // Start running immediately
-        this.startRun();
+        // Collisions
+        this.physics.add.overlap(this.playerBody, this.coins, this.collectCoin, null, this);
+        this.physics.add.collider(this.playerBody, this.obstacles, this.hitObstacle, null, this);
 
-        // Spawn loops
+        // Start
+        this.startTime = Date.now();
+        this.startRun();
+        this.setupTimers();
+      }
+
+      setupTimers() {
+        // Spawn obstacles
         this.time.addEvent({
-          delay: 1400,
+          delay: 1200,
           callback: this.spawnObstacle,
           callbackScope: this,
           loop: true,
         });
 
+        // Spawn coins
         this.time.addEvent({
           delay: 900,
           callback: this.spawnCoin,
@@ -71,65 +114,59 @@ const Game = () => {
           loop: true,
         });
 
-        // Distance counter
+        // Distance + time updater
         this.time.addEvent({
           delay: 200,
           callback: () => {
-            if (!this.gameOver) {
-              this.distance += 1;
-              this.distanceText.setText(`Distance: ${this.distance}m`);
-              this.updateDifficulty();
-            }
+            if (this.isGameOver) return;
+            this.distance += 1;
+            const elapsedSec = Math.floor((Date.now() - this.startTime) / 1000);
+            this.timeText.setText(`Time: ${elapsedSec}s`);
+            this.updateDifficulty();
           },
           loop: true,
         });
       }
 
-      // -------------------------
-      // ANIMATION STATE MACHINE
-      // -------------------------
+      // --------------------
+      // STATE / ANIMATIONS
+      // --------------------
 
       startRun() {
         this.playerState = "run";
-        this.player.setFillStyle(0x000000);
-      }
-
-      idle() {
-        this.playerState = "idle";
-        this.player.setFillStyle(0x444444);
+        this.playerEmoji.setText("🏃‍♂️");
       }
 
       jump() {
-        if (this.playerState === "jump" || this.gameOver) return;
+        if (this.isGameOver) return;
+        if (!this.playerBody.body.blocked.down) return;
 
-        if (this.player.body.blocked.down) {
-          this.playerState = "jump";
-          this.player.body.setVelocityY(-520);
-          this.player.setFillStyle(0x2222ff);
-        }
+        this.playerState = "jump";
+        this.playerBody.body.setVelocityY(-520);
+        this.playerEmoji.setText("🤸‍♂️");
       }
 
       activatePower() {
-        if (!this.powerUnlocked) return;
+        if (!this.powerUnlocked || this.isGameOver) return;
 
         this.playerState = "power";
-        this.player.setFillStyle(0xff0000);
+        this.playerEmoji.setText("🦸‍♂️");
 
         // Temporary invincibility
         this.time.delayedCall(1500, () => {
-          this.startRun();
+          if (!this.isGameOver) this.startRun();
         });
       }
 
-      // -------------------------
-      // INPUT HANDLING
-      // -------------------------
+      // --------------------
+      // INPUT
+      // --------------------
 
       handleTap() {
         const now = Date.now();
 
-        // Double tap = power
-        if (now - this.lastTap < this.tapDelay) {
+        // double tap = power
+        if (now - this.lastTap <= this.doubleTapWindow) {
           this.activatePower();
         } else {
           this.jump();
@@ -138,113 +175,153 @@ const Game = () => {
         this.lastTap = now;
       }
 
-      // -------------------------
-      // SPAWNING
-      // -------------------------
+      // --------------------
+      // SPAWN LOGIC
+      // --------------------
 
       spawnObstacle() {
-        if (this.gameOver) return;
-
+        if (this.isGameOver) return;
         const { width, height } = this.scale;
 
-        const hardness = Math.min(1 + this.distance / 50, 4); // increases every 10m
+        // 1 = rock, 2 = web
+        const type = Phaser.Math.Between(1, 2);
 
-        const obs = this.add.rectangle(
-          width + 40,
-          height - 100,
-          40 * hardness,
-          60,
-          0xff0000
-        );
+        let obsBody;
+        let emoji;
 
-        this.physics.add.existing(obs);
-        obs.body.setVelocityX(-200 - this.distance * 1.2);
-        obs.body.allowGravity = false;
-        obs.body.setImmovable(true);
+        if (type === 1) {
+          // Rock
+          obsBody = this.add.rectangle(width + 40, height - 100, 50, 40, 0x000000, 0);
+          emoji = this.add.text(obsBody.x, obsBody.y - 5, "🪨", {
+            fontSize: "32px",
+          }).setOrigin(0.5);
+        } else {
+          // Web
+          obsBody = this.add.rectangle(width + 40, height - 120, 50, 50, 0x000000, 0);
+          emoji = this.add.text(obsBody.x, obsBody.y - 5, "🕸️", {
+            fontSize: "32px",
+          }).setOrigin(0.5);
+        }
 
-        this.obstacles.add(obs);
+        this.physics.add.existing(obsBody);
+        obsBody.body.setImmovable(true);
+        obsBody.body.allowGravity = false;
+        obsBody.body.setVelocityX(-250 - this.distance); // faster with distance
 
-        this.physics.add.collider(this.player, obs, () => this.hitObstacle());
+        obsBody.emoji = emoji; // link for cleanup
+        this.obstacles.add(obsBody);
       }
 
       spawnCoin() {
-        if (this.gameOver) return;
-
+        if (this.isGameOver) return;
         const { width } = this.scale;
 
-        const y = Phaser.Math.Between(150, 350);
+        const y = Phaser.Math.Between(180, this.scale.height - 160);
 
-        const coin = this.add.circle(width + 40, y, 12, 0xFFD700);
-        this.physics.add.existing(coin);
-        coin.body.setVelocityX(-250 - this.distance);
-        coin.body.allowGravity = false;
+        const coinBody = this.add.rectangle(width + 40, y, 20, 20, 0x000000, 0);
+        const emoji = this.add.text(coinBody.x, coinBody.y - 5, "🪙", {
+          fontSize: "24px",
+        }).setOrigin(0.5);
 
-        this.coins.add(coin);
+        this.physics.add.existing(coinBody);
+        coinBody.body.allowGravity = false;
+        coinBody.body.setVelocityX(-220 - this.distance);
 
-        this.physics.add.overlap(this.player, coin, () => {
-          coin.destroy();
-          this.score += 10;
-          this.scoreText.setText(`Score: ${this.score}`);
-        });
+        coinBody.emoji = emoji;
+        this.coins.add(coinBody);
       }
 
-      // -------------------------
-      // DIFFICULTY + LEVELS
-      // -------------------------
+      // --------------------
+      // DIFFICULTY / LEVEL
+      // --------------------
 
       updateDifficulty() {
+        // Level up at 100m (unlock power)
         if (this.distance >= 100 && !this.powerUnlocked) {
           this.powerUnlocked = true;
           this.level = 2;
-          this.levelText.setText("Level: 2 (Power Unlocked)");
+          this.levelText.setText("Level: 2");
         }
 
+        // Every 10m: slightly ramp difficulty (already baked into speeds)
         if (this.distance % 10 === 0) {
-          // Harder obstacles every 10m
+          // you can add extra tweaks here if you want
         }
       }
 
-      // -------------------------
-      // GAME OVER
-      // -------------------------
+      // --------------------
+      // COLLISIONS
+      // --------------------
 
-      hitObstacle() {
-        if (this.playerState === "power") return; // invincible
+      collectCoin(playerBody, coinBody) {
+        if (coinBody.emoji) coinBody.emoji.destroy();
+        coinBody.destroy();
 
-        this.gameOver = true;
+        this.score += 10;
+        this.scoreText.setText(`Score: ${this.score}`);
+      }
+
+      hitObstacle(playerBody, obsBody) {
+        if (this.isGameOver) return;
+        if (this.playerState === "power") return; // invincible in power mode
+
+        this.isGameOver = true;
         this.physics.pause();
 
-        this.add.text(this.scale.width / 2, this.scale.height / 2 - 40, "Game Over", {
-          fontSize: "48px",
+        // Clean up obstacle emojis
+        this.obstacles.children.iterate((o) => {
+          if (o && o.emoji) o.emoji.setAlpha(0.3);
+        });
+
+        const { width, height } = this.scale;
+
+        this.add.text(width / 2, height / 2 - 60, "Game Over", {
+          fontSize: "42px",
           color: "#000",
         }).setOrigin(0.5);
 
-        const retry = this.add.rectangle(this.scale.width / 2, this.scale.height / 2 + 20, 200, 60, 0xffffff)
+        // Retry
+        const retryRect = this.add.rectangle(width / 2, height / 2 + 10, 180, 50, 0xffffff, 0.9)
           .setInteractive();
-        this.add.text(this.scale.width / 2, this.scale.height / 2 + 20, "Retry", {
-          fontSize: "24px",
+        this.add.text(width / 2, height / 2 + 10, "Retry", {
+          fontSize: "22px",
           color: "#000",
         }).setOrigin(0.5);
 
-        retry.on("pointerdown", () => this.scene.restart());
+        retryRect.on("pointerdown", () => {
+          this.scene.restart({ username: this.usernameFromProps });
+        });
       }
 
-      update() {
-        if (this.gameOver) return;
+      // --------------------
+      // UPDATE LOOP
+      // --------------------
 
-        // Remove off-screen objects
+      update() {
+        if (this.isGameOver) return;
+
+        // Keep player emoji following physics body
+        this.playerEmoji.setPosition(this.playerBody.x, this.playerBody.y - 10);
+
+        // If finished jump, go back to run
+        if (this.playerState === "jump" && this.playerBody.body.blocked.down) {
+          this.startRun();
+        }
+
+        // Remove off-screen obstacles and coins
         this.obstacles.children.iterate((o) => {
-          if (o && o.x < -50) o.destroy();
+          if (o && o.x < -80) {
+            if (o.emoji) o.emoji.destroy();
+            o.destroy();
+          }
         });
 
         this.coins.children.iterate((c) => {
-          if (c && c.x < -50) c.destroy();
+          if (c && c.x < -80) {
+            if (c.emoji) c.emoji.destroy();
+            c.destroy();
+          }
         });
-
-        // Reset animation when landing
-        if (this.playerState === "jump" && this.player.body.blocked.down) {
-          this.startRun();
-        }
       }
     }
 
@@ -271,9 +348,18 @@ const Game = () => {
         gameRef.current = null;
       }
     };
-  }, []);
+  }, [username]);
 
-  return <div id="phaser-container" className="w-full h-full"></div>;
+  return (
+    <div
+      id="phaser-container"
+      style={{
+        width: "100%",
+        height: "100vh",
+        overflow: "hidden",
+      }}
+    />
+  );
 };
 
 export default Game;
