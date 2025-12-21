@@ -1,198 +1,193 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
+import Phaser from 'phaser';
 import { gameAPI } from '../services/api';
-import { useAuthStore } from '../store';
-import toast from 'react-hot-toast';
 
 const Game = () => {
-  const canvasRef = useRef(null);
-  const [gameState, setGameState] = useState('ready'); // ready, playing, finished
-  const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(600); // 10 minutes in seconds
-  const [sessionId, setSessionId] = useState(null);
-  const updateUser = useAuthStore(state => state.updateUser);
-  const refreshProfile = useAuthStore(state => state.refreshProfile);
+  const gameRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    if (gameState === 'playing') {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      
-      // Simple game: Click the moving circles
-      let circles = [];
-      let animationId;
-      let startTime = Date.now();
-      
-      const createCircle = () => ({
-        x: Math.random() * (canvas.width - 40) + 20,
-        y: Math.random() * (canvas.height - 40) + 20,
-        radius: 20,
-        dx: (Math.random() - 0.5) * 4,
-        dy: (Math.random() - 0.5) * 4,
-        color: `hsl(${Math.random() * 360}, 70%, 60%)`,
-      });
-      
-      // Initialize circles
-      for (let i = 0; i < 5; i++) {
-        circles.push(createCircle());
+    if (gameRef.current) return; // prevent multiple inits
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    class MainScene extends Phaser.Scene {
+      constructor() {
+        super('MainScene');
+        this.score = 0;
+        this.scoreText = null;
+        this.player = null;
+        this.platforms = null;
+        this.coins = null;
+        this.isGameOver = false;
       }
-      
-      const drawCircle = (circle) => {
-        ctx.beginPath();
-        ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
-        ctx.fillStyle = circle.color;
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      };
-      
-      const updateCircles = () => {
-        circles.forEach(circle => {
-          circle.x += circle.dx;
-          circle.y += circle.dy;
-          
-          if (circle.x + circle.radius > canvas.width || circle.x - circle.radius < 0) {
-            circle.dx = -circle.dx;
-          }
-          if (circle.y + circle.radius > canvas.height || circle.y - circle.radius < 0) {
-            circle.dy = -circle.dy;
+
+      preload() {
+        // Simple shapes; could be replaced by sprites later
+      }
+
+      create() {
+        // Background color
+        this.cameras.main.setBackgroundColor('#0A1A2F');
+
+        // Ground/platform group
+        this.platforms = this.physics.add.staticGroup();
+        this.platforms.create(width / 2, height - 40, 'ground')
+          .setScale(2)
+          .refreshBody()
+          .setSize(width, 40)
+          .setOffset(0, 0);
+
+        // Player
+        this.player = this.physics.add.sprite(80, height - 100, 'player');
+        this.player.setDisplaySize(32, 32);
+        this.player.setCollideWorldBounds(true);
+        this.player.body.setGravityY(600);
+
+        // Auto‑run
+        this.player.body.setVelocityX(180);
+
+        // Score text
+        this.scoreText = this.add.text(16, 16, 'Score: 0', {
+          fontSize: '18px',
+          fontFamily: 'system-ui, sans-serif',
+          color: '#F5D27C'
+        });
+
+        // Coins group
+        this.coins = this.physics.add.group();
+
+        // Collisions
+        this.physics.add.collider(this.player, this.platforms);
+        this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
+
+        // Spawn coins periodically
+        this.time.addEvent({
+          delay: 800,
+          callback: this.spawnCoin,
+          callbackScope: this,
+          loop: true
+        });
+
+        // Spawn obstacles
+        this.obstacles = this.physics.add.group();
+        this.physics.add.collider(this.player, this.obstacles, this.hitObstacle, null, this);
+
+        this.time.addEvent({
+          delay: 1400,
+          callback: this.spawnObstacle,
+          callbackScope: this,
+          loop: true
+        });
+
+        // Jump on tap/click
+        this.input.on('pointerdown', () => {
+          if (this.isGameOver) return;
+          if (this.player.body.touching.down) {
+            this.player.setVelocityY(-420);
           }
         });
-      };
-      
-      const draw = () => {
-        ctx.fillStyle = '#0a0a0b';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        circles.forEach(drawCircle);
-        updateCircles();
-        
-        // Update timer
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        const remaining = Math.max(0, 600 - elapsed);
-        setTimeLeft(remaining);
-        
-        if (remaining > 0) {
-          animationId = requestAnimationFrame(draw);
-        } else {
-          endGame();
+      }
+
+      spawnCoin() {
+        if (this.isGameOver) return;
+        const y = Phaser.Math.Between(height - 200, height - 120);
+        const coin = this.coins.create(width + 20, y, 'coin');
+        coin.setDisplaySize(18, 18);
+        coin.body.setAllowGravity(false);
+        coin.setVelocityX(-200);
+        coin.checkWorldBounds = true;
+        coin.outOfBoundsKill = true;
+      }
+
+      spawnObstacle() {
+        if (this.isGameOver) return;
+        const obstacle = this.obstacles.create(width + 20, height - 70, 'obstacle');
+        obstacle.setDisplaySize(24, 40);
+        obstacle.body.setAllowGravity(false);
+        obstacle.setVelocityX(-200);
+        obstacle.checkWorldBounds = true;
+        obstacle.outOfBoundsKill = true;
+      }
+
+      collectCoin(player, coin) {
+        coin.destroy();
+        this.score += 1;
+        this.scoreText.setText('Score: ' + this.score);
+      }
+
+      async hitObstacle() {
+        if (this.isGameOver) return;
+        this.isGameOver = true;
+
+        this.physics.pause();
+        this.player.setTint(0xff0000);
+
+        // Show game over text
+        this.add.text(width / 2, height / 2 - 20, 'Trial Complete', {
+          fontSize: '24px',
+          fontFamily: 'system-ui, sans-serif',
+          color: '#F5D27C'
+        }).setOrigin(0.5);
+
+        this.add.text(width / 2, height / 2 + 20, `Score: ${this.score}`, {
+          fontSize: '18px',
+          fontFamily: 'system-ui, sans-serif',
+          color: '#FFFFFF'
+        }).setOrigin(0.5);
+
+        // Send score to backend
+        try {
+          await gameAPI.submitScore({ score: this.score });
+        } catch (e) {
+          console.error('Failed to submit score', e);
         }
-      };
-      
-      const handleClick = (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        circles = circles.filter(circle => {
-          const distance = Math.sqrt((x - circle.x) ** 2 + (y - circle.y) ** 2);
-          if (distance < circle.radius) {
-            setScore(s => s + 10);
-            return false;
-          }
-          return true;
+
+        // Optionally: return to dashboard after delay
+        this.time.delayedCall(2000, () => {
+          window.history.back();
         });
-        
-        // Add new circle if less than 5
-        while (circles.length < 5) {
-          circles.push(createCircle());
+      }
+
+      update() {
+        if (this.isGameOver) return;
+
+        // Keep player roughly at same x, world scrolls via objects
+        if (this.player.x < 80) {
+          this.player.x = 80;
         }
-      };
-      
-      canvas.addEventListener('click', handleClick);
-      draw();
-      
-      return () => {
-        cancelAnimationFrame(animationId);
-        canvas.removeEventListener('click', handleClick);
-      };
+      }
     }
-  }, [gameState]);
 
-  const startGame = async () => {
-    try {
-      const response = await gameAPI.startGame();
-      setSessionId(response.data.data.sessionId);
-      setGameState('playing');
-      setScore(0);
-      setTimeLeft(600);
-      toast.success('Game started! Click the circles!');
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to start game');
-    }
-  };
+    const config = {
+      type: Phaser.AUTO,
+      width,
+      height,
+      parent: containerRef.current,
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { y: 0 },
+          debug: false
+        }
+      },
+      scene: [MainScene]
+    };
 
-  const endGame = async () => {
-    setGameState('finished');
-    try {
-      const response = await gameAPI.completeGame({
-        score,
-        durationSeconds: 600 - timeLeft,
-      });
-      
-      const { pointsEarned, totalPoints, currentLevel } = response.data.data;
-      updateUser({ totalPoints, currentLevel });
-      
-      toast.success(`Game complete! You earned ${pointsEarned} points!`);
-      await refreshProfile();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to complete game');
-    }
-  };
+    gameRef.current = new Phaser.Game(config);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+    return () => {
+      if (gameRef.current) {
+        gameRef.current.destroy(true);
+        gameRef.current = null;
+      }
+    };
+  }, []);
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <div className="card">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-display font-bold gradient-text">Daily Challenge</h2>
-          <div className="flex gap-6 text-sm">
-            <div className="text-center">
-              <div className="text-gray-400">Score</div>
-              <div className="text-2xl font-bold text-primary-500">{score}</div>
-            </div>
-            <div className="text-center">
-              <div className="text-gray-400">Time</div>
-              <div className="text-2xl font-bold">{formatTime(timeLeft)}</div>
-            </div>
-          </div>
-        </div>
-        
-        {gameState === 'ready' && (
-          <div className="text-center py-12">
-            <h3 className="text-xl font-semibold mb-4">Ready to Play?</h3>
-            <p className="text-gray-400 mb-6">Click the moving circles to score points! You have 10 minutes.</p>
-            <button onClick={startGame} className="btn-primary">
-              Start Game
-            </button>
-          </div>
-        )}
-        
-        {gameState === 'playing' && (
-          <canvas
-            ref={canvasRef}
-            width={800}
-            height={500}
-            className="w-full border-2 border-dark-600 rounded-xl cursor-pointer"
-          />
-        )}
-        
-        {gameState === 'finished' && (
-          <div className="text-center py-12">
-            <h3 className="text-3xl font-bold mb-4">Game Over!</h3>
-            <p className="text-xl text-primary-500 mb-2">Final Score: {score}</p>
-            <p className="text-gray-400 mb-6">Come back tomorrow to play again!</p>
-            <button onClick={() => window.location.href = '/dashboard'} className="btn-primary">
-              Back to Dashboard
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="w-full h-full">
+      <div ref={containerRef} className="w-full h-full" />
     </div>
   );
 };
