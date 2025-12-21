@@ -1,5 +1,13 @@
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
+import bg1 from "../assets/bg-sheba-desert.png";
+import bg2 from "../assets/bg-sheba-city.png";
+import playerImg from "../assets/player-guardian.png";
+import dustImg from "../assets/dust.png";
+import coinImg from "../assets/coin-gold.png";
+import obstacleImg from "../assets/obstacle-pillar.png";
+import bannerImg from "../assets/ui-banner.png";
+import buttonImg from "../assets/ui-button.png";
 
 const Game = () => {
   const gameRef = useRef(null);
@@ -17,23 +25,17 @@ const Game = () => {
         this.started = false;
       }
 
-      preload() {
-        // Background layers (parallax)
-        this.load.image("bg1", "/assets/bg-sheba-desert.png");
-        this.load.image("bg2", "/assets/bg-sheba-city.png");
+  preload() {
+  this.load.image("bg1", bg1);
+  this.load.image("bg2", bg2);
+  this.load.image("player", playerImg);
+  this.load.image("dust", dustImg);
+  this.load.image("coin", coinImg);
+  this.load.image("obstacle", obstacleImg);
+  this.load.image("banner", bannerImg);
+  this.load.image("button", buttonImg);
+}
 
-        // Player + FX
-        this.load.image("player", "/assets/player-guardian.png");
-        this.load.image("dust", "/assets/dust.png");
-
-        // Objects
-        this.load.image("coin", "/assets/coin-gold.png");
-        this.load.image("obstacle", "/assets/obstacle-pillar.png");
-
-        // UI
-        this.load.image("banner", "/assets/ui-banner.png");
-        this.load.image("button", "/assets/ui-button.png");
-      }
 
       create() {
         const { width, height } = this.scale;
