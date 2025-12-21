@@ -4,16 +4,6 @@ import Phaser from "phaser";
 import { gameAPI } from "../services/api";
 import { useAuthStore } from "../store";
 
-// Import assets
-import bg1 from "../assets/bg-sheba-desert.png";
-import bg2 from "../assets/bg-sheba-city.png";
-import playerImg from "../assets/player-guardian.png";
-import dustImg from "../assets/dust.png";
-import coinImg from "../assets/coin-gold.png";
-import obstacleImg from "../assets/obstacle-pillar.png";
-import bannerImg from "../assets/ui-banner.png";
-import buttonImg from "../assets/ui-button.png";
-
 const Game = () => {
   const gameRef = useRef(null);
   const sceneRef = useRef(null);
@@ -29,11 +19,10 @@ const Game = () => {
   });
 
   useEffect(() => {
-    // Prevent multiple game instances
     if (gameRef.current) return;
 
     // ============================================================
-    // MAIN GAME SCENE - Professional Architecture
+    // MAIN GAME SCENE - Temple Run Style
     // ============================================================
     class MainScene extends Phaser.Scene {
       constructor() {
@@ -49,11 +38,17 @@ const Game = () => {
         this.isPaused = false;
         
         // Game mechanics
-        this.baseSpeed = 260;
-        this.currentSpeed = 260;
+        this.baseSpeed = 300;
+        this.currentSpeed = 300;
         this.difficulty = 1;
-        this.obstacleInterval = 1500;
-        this.coinInterval = 1200;
+        this.obstacleInterval = 2000;
+        this.coinInterval = 1500;
+        
+        // Lane system (3 lanes)
+        this.lanes = [0, 1, 2]; // Left, Center, Right
+        this.currentLane = 1; // Start in center
+        this.laneWidth = 0;
+        this.isMoving = false;
         
         // UI Elements
         this.scoreText = null;
@@ -68,180 +63,304 @@ const Game = () => {
         // Groups
         this.obstacles = null;
         this.coins = null;
+        this.groundTiles = null;
       }
 
       preload() {
-        // Load all assets
-        this.load.image("bg1", bg1);
-        this.load.image("bg2", bg2);
-        this.load.image("player", playerImg);
-        this.load.image("dust", dustImg);
-        this.load.image("coin", coinImg);
-        this.load.image("obstacle", obstacleImg);
-        this.load.image("banner", bannerImg);
-        this.load.image("button", buttonImg);
+        // Create all graphics procedurally - no external images needed
+        this.createGraphics();
+      }
+
+      // ============================================================
+      // CREATE ALL GRAPHICS PROGRAMMATICALLY
+      // ============================================================
+      createGraphics() {
+        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
         
-        // Loading progress (optional)
-        this.load.on("progress", (value) => {
-          console.log("Loading:", Math.floor(value * 100) + "%");
-        });
+        // 1. PLAYER (Running character)
+        graphics.clear();
+        graphics.fillStyle(0xFF6B35, 1); // Orange body
+        graphics.fillRoundedRect(0, 0, 40, 60, 8);
+        // Head
+        graphics.fillStyle(0xFFB088, 1); // Skin tone
+        graphics.fillCircle(20, 15, 12);
+        // Cape (for royal look)
+        graphics.fillStyle(0x8B0000, 1); // Dark red cape
+        graphics.fillTriangle(5, 25, 35, 25, 20, 55);
+        graphics.generateTexture('player', 40, 60);
+        
+        // 2. GROUND TILE (Stone path)
+        graphics.clear();
+        graphics.fillStyle(0x8B7355, 1); // Brown stone
+        graphics.fillRect(0, 0, 150, 150);
+        // Add grid pattern
+        graphics.lineStyle(2, 0x6B5344, 0.5);
+        graphics.strokeRect(5, 5, 140, 140);
+        graphics.strokeRect(40, 40, 70, 70);
+        graphics.generateTexture('ground', 150, 150);
+        
+        // 3. OBSTACLE (Pillar)
+        graphics.clear();
+        graphics.fillStyle(0x8B4513, 1); // Brown pillar
+        graphics.fillRect(10, 0, 50, 80);
+        // Top cap
+        graphics.fillStyle(0xD2691E, 1);
+        graphics.fillRect(0, 0, 70, 15);
+        // Shadow
+        graphics.fillStyle(0x000000, 0.3);
+        graphics.fillRect(15, 70, 40, 10);
+        graphics.generateTexture('obstacle', 70, 80);
+        
+        // 4. COIN (Gold coin with crown)
+        graphics.clear();
+        graphics.fillStyle(0xFFD700, 1); // Gold
+        graphics.fillCircle(20, 20, 18);
+        // Inner circle
+        graphics.fillStyle(0xFFA500, 1);
+        graphics.fillCircle(20, 20, 12);
+        // Crown symbol
+        graphics.fillStyle(0xFFD700, 1);
+        graphics.fillTriangle(16, 15, 20, 10, 24, 15);
+        graphics.fillRect(14, 15, 12, 8);
+        graphics.generateTexture('coin', 40, 40);
+        
+        // 5. DUST PARTICLE
+        graphics.clear();
+        graphics.fillStyle(0xFFFFFF, 0.6);
+        graphics.fillCircle(5, 5, 5);
+        graphics.generateTexture('dust', 10, 10);
+        
+        // 6. BACKGROUND ELEMENTS
+        // Sky gradient (we'll use rectangles)
+        graphics.clear();
+        const gradient = graphics.createLinearGradient(0, 0, 0, 600);
+        // Desert sky colors
+        graphics.fillGradientStyle(0x87CEEB, 0x87CEEB, 0xF4A460, 0xF4A460, 1);
+        graphics.fillRect(0, 0, 1000, 600);
+        graphics.generateTexture('sky', 1000, 600);
+        
+        // 7. MOUNTAIN SILHOUETTE
+        graphics.clear();
+        graphics.fillStyle(0x8B7355, 0.6);
+        graphics.fillTriangle(0, 300, 250, 100, 500, 300);
+        graphics.fillTriangle(200, 300, 400, 150, 600, 300);
+        graphics.generateTexture('mountains', 600, 300);
+        
+        // 8. LANE MARKERS
+        graphics.clear();
+        graphics.fillStyle(0xFFFFFF, 0.3);
+        graphics.fillRect(0, 0, 10, 100);
+        graphics.generateTexture('lane_marker', 10, 100);
+
+        graphics.destroy();
       }
 
       create() {
         const { width, height } = this.scale;
-
-        // Smooth camera fade-in
-        this.cameras.main.fadeIn(600, 0, 0, 0);
-
-        // ============================================================
-        // PARALLAX BACKGROUND SYSTEM
-        // ============================================================
-        this.bg1 = this.add
-          .tileSprite(0, 0, width, height, "bg1")
-          .setOrigin(0)
-          .setDepth(-2);
         
-        this.bg2 = this.add
-          .tileSprite(0, 0, width, height, "bg2")
-          .setOrigin(0)
-          .setAlpha(0.7)
-          .setDepth(-1);
+        this.cameras.main.fadeIn(600, 135, 206, 235);
 
         // ============================================================
-        // GROUND PHYSICS
+        // BACKGROUND LAYERS
         // ============================================================
-        this.ground = this.physics.add.staticGroup();
-        const groundHeight = 40;
-        this.ground
-          .create(width / 2, height - groundHeight / 2, "bg1")
-          .setDisplaySize(width, groundHeight)
-          .setAlpha(0.3)
-          .refreshBody();
+        
+        // Sky
+        this.add.rectangle(0, 0, width, height, 0x87CEEB).setOrigin(0);
+        
+        // Desert sand ground color
+        this.add.rectangle(0, height - 200, width, 200, 0xF4A460).setOrigin(0);
+        
+        // Mountains (parallax background)
+        this.mountains = this.add.tileSprite(0, height - 300, width, 300, 'mountains')
+          .setOrigin(0)
+          .setAlpha(0.6);
+
+        // ============================================================
+        // 3D PERSPECTIVE LANE SYSTEM
+        // ============================================================
+        
+        this.laneWidth = width / 3;
+        
+        // Draw lane markers
+        this.laneMarkers = this.add.group();
+        for (let i = 0; i < 10; i++) {
+          const y = (height / 2) + (i * 100);
+          
+          // Left lane marker
+          const leftMarker = this.add.rectangle(
+            this.laneWidth - 5,
+            y,
+            10,
+            80,
+            0xFFFFFF,
+            0.3
+          );
+          this.laneMarkers.add(leftMarker);
+          
+          // Right lane marker
+          const rightMarker = this.add.rectangle(
+            this.laneWidth * 2 + 5,
+            y,
+            10,
+            80,
+            0xFFFFFF,
+            0.3
+          );
+          this.laneMarkers.add(rightMarker);
+        }
+
+        // ============================================================
+        // GROUND TILES (Moving perspective)
+        // ============================================================
+        
+        this.groundTiles = this.add.group();
+        for (let i = 0; i < 8; i++) {
+          const tile = this.add.tileSprite(
+            width / 2,
+            (height / 2) + (i * 100),
+            width,
+            100,
+            'ground'
+          );
+          tile.setScale(1 - (i * 0.08)); // Perspective scaling
+          this.groundTiles.add(tile);
+        }
 
         // ============================================================
         // PLAYER SETUP
         // ============================================================
-        this.player = this.physics.add.sprite(120, height - 120, "player");
-        this.player.setGravityY(900);
-        this.player.setCollideWorldBounds(true);
-        this.player.setScale(1.2);
-        this.player.setDepth(10);
         
-        // Player physics collision
-        this.physics.add.collider(this.player, this.ground, () => {
-          this.player.canJump = true;
+        this.player = this.add.sprite(
+          this.getLaneX(this.currentLane),
+          height - 250,
+          'player'
+        );
+        this.player.setScale(1.5);
+        this.player.setDepth(100);
+        
+        // Running animation (bob up and down)
+        this.tweens.add({
+          targets: this.player,
+          y: height - 260,
+          duration: 200,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
         });
 
         // ============================================================
-        // PARTICLE EFFECTS - Dust Trail
+        // PARTICLE EFFECTS
         // ============================================================
-        this.dust = this.add.particles("dust");
+        
+        this.dust = this.add.particles('dust');
         this.dustEmitter = this.dust.createEmitter({
-          x: this.player.x - 20,
-          y: this.player.y + 20,
-          speedX: { min: -80, max: -150 },
-          speedY: { min: -20, max: 20 },
-          scale: { start: 0.5, end: 0 },
+          x: this.player.x,
+          y: this.player.y + 30,
+          speedX: { min: -150, max: -250 },
+          speedY: { min: -30, max: 30 },
+          scale: { start: 1, end: 0 },
           alpha: { start: 0.6, end: 0 },
-          lifespan: 400,
+          lifespan: 500,
           quantity: 0,
-          blendMode: "ADD",
+          blendMode: 'ADD',
         });
 
         // ============================================================
-        // UI SETUP - Score, Coins, Distance
+        // UI ELEMENTS
         // ============================================================
-        const uiBannerY = 50;
         
-        // Score banner
-        this.add
-          .image(width / 2, uiBannerY, "banner")
-          .setScale(0.6)
-          .setDepth(100);
+        // Score display
+        const uiY = 40;
         
-        this.scoreText = this.add
-          .text(width / 2, uiBannerY, "0", {
-            fontSize: "32px",
-            color: "#FFD700",
-            fontFamily: "Cinzel, serif",
-            fontStyle: "bold",
-            stroke: "#8B4513",
-            strokeThickness: 4,
-          })
-          .setOrigin(0.5)
-          .setDepth(101);
+        // Score
+        this.scoreText = this.add.text(width / 2, uiY, '0', {
+          fontSize: '48px',
+          color: '#FFD700',
+          fontFamily: 'Arial Black, sans-serif',
+          stroke: '#000000',
+          strokeThickness: 6,
+        }).setOrigin(0.5).setDepth(1000);
 
-        // Coin counter (top left)
-        this.add
-          .text(20, 20, "🪙", {
-            fontSize: "28px",
-          })
-          .setDepth(100);
-        
-        this.coinText = this.add
-          .text(55, 20, "0", {
-            fontSize: "24px",
-            color: "#FFD700",
-            fontFamily: "Cinzel, serif",
-            fontStyle: "bold",
-            stroke: "#000",
-            strokeThickness: 3,
-          })
-          .setDepth(101);
+        // Coin counter
+        this.add.text(30, 30, '🪙', { fontSize: '32px' }).setDepth(1000);
+        this.coinText = this.add.text(70, 30, '0', {
+          fontSize: '28px',
+          color: '#FFD700',
+          fontFamily: 'Arial, sans-serif',
+          stroke: '#000',
+          strokeThickness: 4,
+        }).setDepth(1000);
 
-        // Distance counter (top right)
-        this.distanceText = this.add
-          .text(width - 20, 20, "0m", {
-            fontSize: "20px",
-            color: "#FFF",
-            fontFamily: "Cinzel, serif",
-            alpha: 0.8,
-          })
-          .setOrigin(1, 0)
-          .setDepth(100);
+        // Distance
+        this.distanceText = this.add.text(width - 30, 30, '0m', {
+          fontSize: '24px',
+          color: '#FFF',
+          fontFamily: 'Arial, sans-serif',
+          alpha: 0.9,
+        }).setOrigin(1, 0).setDepth(1000);
+
+        // Speed indicator
+        this.speedText = this.add.text(width - 30, 60, 'Speed: 1x', {
+          fontSize: '18px',
+          color: '#FFF',
+          fontFamily: 'Arial, sans-serif',
+          alpha: 0.7,
+        }).setOrigin(1, 0).setDepth(1000);
 
         // ============================================================
         // PHYSICS GROUPS
         // ============================================================
-        this.obstacles = this.physics.add.group();
-        this.coins = this.physics.add.group();
-
-        // ============================================================
-        // COLLISION DETECTION
-        // ============================================================
-        this.physics.add.overlap(
-          this.player,
-          this.coins,
-          this.collectCoin,
-          null,
-          this
-        );
         
-        this.physics.add.overlap(
-          this.player,
-          this.obstacles,
-          this.hitObstacle,
-          null,
-          this
-        );
+        this.obstacles = this.add.group();
+        this.coins = this.add.group();
 
         // ============================================================
         // INPUT HANDLERS
         // ============================================================
-        // Touch/Click to jump
-        this.input.on("pointerdown", () => {
-          this.handleJump();
+        
+        // Swipe detection
+        this.input.on('pointerdown', (pointer) => {
+          this.swipeStartX = pointer.x;
+          this.swipeStartY = pointer.y;
         });
         
-        // Keyboard support
-        this.cursors = this.input.keyboard.createCursorKeys();
-        this.input.keyboard.on("keydown-SPACE", () => {
-          this.handleJump();
+        this.input.on('pointerup', (pointer) => {
+          if (!this.started || this.gameOver || this.isPaused) return;
+          
+          const swipeEndX = pointer.x;
+          const swipeEndY = pointer.y;
+          const diffX = swipeEndX - this.swipeStartX;
+          const diffY = swipeEndY - this.swipeStartY;
+          
+          // Horizontal swipe (lane change)
+          if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+            if (diffX > 0) {
+              this.moveRight();
+            } else {
+              this.moveLeft();
+            }
+          }
+          // Vertical swipe
+          else if (Math.abs(diffY) > 50) {
+            if (diffY < 0) {
+              this.jump();
+            } else {
+              this.slide();
+            }
+          }
         });
+        
+        // Keyboard controls
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.on('keydown-A', () => this.moveLeft());
+        this.input.keyboard.on('keydown-D', () => this.moveRight());
+        this.input.keyboard.on('keydown-W', () => this.jump());
+        this.input.keyboard.on('keydown-S', () => this.slide());
 
         // ============================================================
-        // SHOW INTRO SCREEN
+        // SHOW INTRO
         // ============================================================
+        
         this.showIntro();
       }
 
@@ -251,103 +370,95 @@ const Game = () => {
       showIntro() {
         const { width, height } = this.scale;
 
-        // Title with glow effect
-        this.introText = this.add
-          .text(width / 2, height / 2 - 80, "Trial of the Queen", {
-            fontSize: "48px",
-            color: "#FFD700",
-            fontFamily: "Cinzel, serif",
-            fontStyle: "bold",
-            stroke: "#8B4513",
-            strokeThickness: 6,
-          })
-          .setOrigin(0.5)
-          .setDepth(200);
+        // Overlay
+        const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.7)
+          .setOrigin(0)
+          .setDepth(500);
 
-        // Subtitle
-        this.introSubtitle = this.add
-          .text(width / 2, height / 2 - 20, "Collect coins • Avoid obstacles", {
-            fontSize: "20px",
-            color: "#FFF",
-            fontFamily: "Cinzel, serif",
-            alpha: 0.8,
-          })
-          .setOrigin(0.5)
-          .setDepth(200);
+        // Title
+        this.introTitle = this.add.text(width / 2, height / 2 - 120, 
+          '👑 QUEEN\'S TEMPLE RUN 👑', {
+            fontSize: '52px',
+            color: '#FFD700',
+            fontFamily: 'Arial Black, sans-serif',
+            stroke: '#8B0000',
+            strokeThickness: 8,
+            align: 'center',
+          }
+        ).setOrigin(0.5).setDepth(501);
 
         // Instructions
-        this.introInstructions = this.add
-          .text(width / 2, height / 2 + 20, "Tap to jump", {
-            fontSize: "18px",
-            color: "#FFD700",
-            fontFamily: "Cinzel, serif",
-            alpha: 0.6,
-          })
-          .setOrigin(0.5)
-          .setDepth(200);
+        const instructions = [
+          'SWIPE LEFT/RIGHT - Change lanes',
+          'SWIPE UP - Jump over obstacles',
+          'SWIPE DOWN - Slide under barriers',
+          '',
+          'Or use Arrow Keys / WASD',
+        ];
+
+        this.introInstructions = this.add.text(
+          width / 2, 
+          height / 2, 
+          instructions.join('\n'),
+          {
+            fontSize: '20px',
+            color: '#FFF',
+            fontFamily: 'Arial, sans-serif',
+            align: 'center',
+            lineSpacing: 8,
+          }
+        ).setOrigin(0.5).setDepth(501);
 
         // Start button
-        this.startButton = this.add
-          .image(width / 2, height / 2 + 80, "button")
-          .setInteractive({ useHandCursor: true })
-          .setScale(0.8)
-          .setDepth(200);
+        const buttonBg = this.add.rectangle(width / 2, height / 2 + 120, 250, 60, 0xFF6B35)
+          .setDepth(501)
+          .setInteractive({ useHandCursor: true });
+        
+        const buttonText = this.add.text(width / 2, height / 2 + 120, 'START RUNNING', {
+          fontSize: '24px',
+          color: '#FFF',
+          fontFamily: 'Arial Black, sans-serif',
+        }).setOrigin(0.5).setDepth(502);
 
-        this.startLabel = this.add
-          .text(width / 2, height / 2 + 80, "BEGIN TRIAL", {
-            fontSize: "24px",
-            color: "#000",
-            fontFamily: "Cinzel, serif",
-            fontStyle: "bold",
-          })
-          .setOrigin(0.5)
-          .setDepth(201);
-
-        // Button hover effect
-        this.startButton.on("pointerover", () => {
-          this.startButton.setScale(0.85);
+        // Button hover
+        buttonBg.on('pointerover', () => {
+          buttonBg.setFillStyle(0xFF8C55);
+          buttonBg.setScale(1.05);
         });
         
-        this.startButton.on("pointerout", () => {
-          this.startButton.setScale(0.8);
+        buttonBg.on('pointerout', () => {
+          buttonBg.setFillStyle(0xFF6B35);
+          buttonBg.setScale(1);
         });
 
-        // Start game on click
-        this.startButton.on("pointerdown", () => {
-          this.startTrial();
+        // Start game
+        buttonBg.on('pointerdown', () => {
+          this.tweens.add({
+            targets: [overlay, this.introTitle, this.introInstructions, buttonBg, buttonText],
+            alpha: 0,
+            duration: 300,
+            onComplete: () => {
+              overlay.destroy();
+              this.introTitle.destroy();
+              this.introInstructions.destroy();
+              buttonBg.destroy();
+              buttonText.destroy();
+              this.startGame();
+            }
+          });
         });
+
+        this.introElements = [overlay, this.introTitle, this.introInstructions, buttonBg, buttonText];
       }
 
       // ============================================================
       // START GAME
       // ============================================================
-      startTrial() {
+      startGame() {
         this.started = true;
+        this.dustEmitter.setQuantity(3);
 
-        // Fade out intro elements
-        this.tweens.add({
-          targets: [
-            this.introText,
-            this.introSubtitle,
-            this.introInstructions,
-            this.startButton,
-            this.startLabel,
-          ],
-          alpha: 0,
-          duration: 300,
-          onComplete: () => {
-            this.introText?.destroy();
-            this.introSubtitle?.destroy();
-            this.introInstructions?.destroy();
-            this.startButton?.destroy();
-            this.startLabel?.destroy();
-          },
-        });
-
-        // Start dust trail
-        this.dustEmitter.setQuantity(2);
-
-        // Start spawning obstacles
+        // Start spawning
         this.obstacleTimer = this.time.addEvent({
           delay: this.obstacleInterval,
           callback: this.spawnObstacle,
@@ -355,7 +466,6 @@ const Game = () => {
           loop: true,
         });
 
-        // Start spawning coins
         this.coinTimer = this.time.addEvent({
           delay: this.coinInterval,
           callback: this.spawnCoin,
@@ -363,9 +473,9 @@ const Game = () => {
           loop: true,
         });
 
-        // Increase difficulty over time
+        // Increase difficulty
         this.difficultyTimer = this.time.addEvent({
-          delay: 10000, // Every 10 seconds
+          delay: 15000, // Every 15 seconds
           callback: this.increaseDifficulty,
           callbackScope: this,
           loop: true,
@@ -373,26 +483,74 @@ const Game = () => {
       }
 
       // ============================================================
-      // JUMP MECHANIC
+      // LANE MOVEMENT
       // ============================================================
-      handleJump() {
-        if (!this.started || this.gameOver || this.isPaused) return;
+      getLaneX(lane) {
+        return (lane * this.laneWidth) + (this.laneWidth / 2);
+      }
+
+      moveLeft() {
+        if (this.isMoving || this.currentLane <= 0) return;
+        this.isMoving = true;
+        this.currentLane--;
         
-        if (this.player.body.touching.down) {
-          this.player.setVelocityY(-550);
-          
-          // Jump particle burst
-          this.dust.createEmitter({
-            x: this.player.x,
-            y: this.player.y + 30,
-            speedX: { min: -100, max: 100 },
-            speedY: { min: -50, max: 50 },
-            scale: { start: 0.6, end: 0 },
-            lifespan: 300,
-            quantity: 6,
-            on: false,
-          }).explode();
-        }
+        this.tweens.add({
+          targets: this.player,
+          x: this.getLaneX(this.currentLane),
+          duration: 200,
+          ease: 'Sine.easeOut',
+          onComplete: () => {
+            this.isMoving = false;
+          }
+        });
+      }
+
+      moveRight() {
+        if (this.isMoving || this.currentLane >= 2) return;
+        this.isMoving = true;
+        this.currentLane++;
+        
+        this.tweens.add({
+          targets: this.player,
+          x: this.getLaneX(this.currentLane),
+          duration: 200,
+          ease: 'Sine.easeOut',
+          onComplete: () => {
+            this.isMoving = false;
+          }
+        });
+      }
+
+      jump() {
+        if (this.player.isJumping) return;
+        
+        this.player.isJumping = true;
+        const originalY = this.player.y;
+        
+        this.tweens.add({
+          targets: this.player,
+          y: originalY - 120,
+          duration: 400,
+          ease: 'Quad.easeOut',
+          yoyo: true,
+          onComplete: () => {
+            this.player.isJumping = false;
+          }
+        });
+      }
+
+      slide() {
+        if (this.player.isSliding) return;
+        
+        this.player.isSliding = true;
+        const originalScaleY = this.player.scaleY;
+        
+        this.player.setScale(this.player.scaleX, 0.5);
+        
+        this.time.delayedCall(600, () => {
+          this.player.setScale(this.player.scaleX, originalScaleY);
+          this.player.isSliding = false;
+        });
       }
 
       // ============================================================
@@ -401,16 +559,35 @@ const Game = () => {
       spawnObstacle() {
         if (!this.started || this.gameOver || this.isPaused) return;
 
-        const { width, height } = this.scale;
+        const { height } = this.scale;
+        const lane = Phaser.Math.Between(0, 2);
+        const x = this.getLaneX(lane);
         
-        // Random obstacle height variation
-        const obstacleY = height - Phaser.Math.Between(80, 120);
+        // Random obstacle type
+        const type = Phaser.Math.Between(0, 1);
         
-        const obs = this.obstacles.create(width + 50, obstacleY, "obstacle");
-        obs.setVelocityX(-this.currentSpeed);
-        obs.setImmovable(true);
-        obs.setScale(Phaser.Math.FloatBetween(0.9, 1.2));
-        obs.body.setSize(obs.width * 0.8, obs.height); // Tighter hitbox
+        const obstacle = this.add.sprite(x, -100, 'obstacle');
+        obstacle.setData('lane', lane);
+        obstacle.setData('type', type); // 0 = jump over, 1 = slide under
+        
+        if (type === 1) {
+          // Barrier - must slide under
+          obstacle.setTint(0xFF0000);
+          obstacle.y = height - 350;
+        }
+        
+        this.obstacles.add(obstacle);
+        
+        // Move obstacle toward player
+        this.tweens.add({
+          targets: obstacle,
+          y: height + 100,
+          duration: 2000 / (this.difficulty * 0.5),
+          ease: 'Linear',
+          onComplete: () => {
+            obstacle.destroy();
+          }
+        });
       }
 
       // ============================================================
@@ -419,48 +596,88 @@ const Game = () => {
       spawnCoin() {
         if (!this.started || this.gameOver || this.isPaused) return;
 
-        const { width, height } = this.scale;
+        const { height } = this.scale;
+        const lane = Phaser.Math.Between(0, 2);
+        const x = this.getLaneX(lane);
         
-        // Coins at varying heights
-        const coinY = Phaser.Math.Between(height - 300, height - 150);
-        
-        const coin = this.coins.create(width + 50, coinY, "coin");
-        coin.setVelocityX(-this.currentSpeed + 40);
+        const coin = this.add.sprite(x, -100, 'coin');
+        coin.setData('lane', lane);
         coin.setScale(1.2);
+        this.coins.add(coin);
         
-        // Coin rotation animation
+        // Rotate coin
         this.tweens.add({
           targets: coin,
           angle: 360,
-          duration: 1500,
+          duration: 1000,
           repeat: -1,
         });
         
-        // Coin pulse animation
+        // Move coin
         this.tweens.add({
           targets: coin,
-          scaleX: 1.3,
-          scaleY: 1.3,
-          duration: 500,
-          yoyo: true,
-          repeat: -1,
+          y: height + 100,
+          duration: 2000 / (this.difficulty * 0.5),
+          ease: 'Linear',
+          onComplete: () => {
+            coin.destroy();
+          }
+        });
+      }
+
+      // ============================================================
+      // COLLISION DETECTION
+      // ============================================================
+      checkCollisions() {
+        const playerZone = this.player.y;
+        const playerLane = this.currentLane;
+        
+        // Check obstacles
+        this.obstacles.children.entries.forEach((obstacle) => {
+          const obstacleZone = obstacle.y;
+          const obstacleLane = obstacle.getData('lane');
+          const obstacleType = obstacle.getData('type');
+          
+          if (obstacleLane === playerLane && 
+              Math.abs(obstacleZone - playerZone) < 80) {
+            
+            // Check if player can avoid
+            if (obstacleType === 0 && !this.player.isJumping) {
+              // Need to jump, but didn't
+              this.hitObstacle();
+            } else if (obstacleType === 1 && !this.player.isSliding) {
+              // Need to slide, but didn't
+              this.hitObstacle();
+            }
+          }
+        });
+        
+        // Check coins
+        this.coins.children.entries.forEach((coin) => {
+          const coinZone = coin.y;
+          const coinLane = coin.getData('lane');
+          
+          if (coinLane === playerLane && 
+              Math.abs(coinZone - playerZone) < 60) {
+            this.collectCoin(coin);
+          }
         });
       }
 
       // ============================================================
       // COLLECT COIN
       // ============================================================
-      collectCoin(player, coin) {
-        // Particle burst effect
+      collectCoin(coin) {
+        // Particle burst
         this.dust.createEmitter({
           x: coin.x,
           y: coin.y,
           speedX: { min: -100, max: 100 },
           speedY: { min: -100, max: 100 },
-          scale: { start: 0.8, end: 0 },
+          scale: { start: 1.5, end: 0 },
           tint: 0xFFD700,
           lifespan: 400,
-          quantity: 8,
+          quantity: 10,
           on: false,
         }).explode();
         
@@ -471,99 +688,90 @@ const Game = () => {
         this.scoreText.setText(this.score);
         this.coinText.setText(this.coins);
         
-        // Score pop animation
+        // Score pop
         this.tweens.add({
           targets: this.scoreText,
-          scaleX: 1.2,
-          scaleY: 1.2,
+          scale: 1.2,
           duration: 100,
           yoyo: true,
         });
       }
 
       // ============================================================
-      // HIT OBSTACLE - GAME OVER
+      // HIT OBSTACLE
       // ============================================================
       hitObstacle() {
         if (this.gameOver) return;
-
-        this.gameOver = true;
         
-        // Pause physics
-        this.physics.pause();
+        this.gameOver = true;
         
         // Stop timers
         if (this.obstacleTimer) this.obstacleTimer.destroy();
         if (this.coinTimer) this.coinTimer.destroy();
         if (this.difficultyTimer) this.difficultyTimer.destroy();
         
-        // Player death effect
-        this.player.setTint(0xff0000);
-        this.player.setVelocity(0);
+        // Player stumble
+        this.player.setTint(0xFF0000);
+        this.tweens.add({
+          targets: this.player,
+          angle: 90,
+          y: this.player.y + 50,
+          duration: 500,
+          ease: 'Bounce.easeOut',
+        });
         
         // Camera shake
-        this.cameras.main.shake(200, 0.01);
+        this.cameras.main.shake(300, 0.02);
         
         // Stop dust
         this.dustEmitter.stop();
         
-        // Show game over
         this.showGameOver();
       }
 
       // ============================================================
-      // GAME OVER SCREEN
+      // GAME OVER
       // ============================================================
       async showGameOver() {
         const { width, height } = this.scale;
 
-        // Darken screen
-        const overlay = this.add
-          .rectangle(0, 0, width, height, 0x000000, 0.7)
+        // Dark overlay
+        const overlay = this.add.rectangle(0, 0, width, height, 0x000000, 0.8)
           .setOrigin(0)
-          .setDepth(300)
+          .setDepth(1000)
           .setAlpha(0);
         
         this.tweens.add({
           targets: overlay,
-          alpha: 0.7,
+          alpha: 0.8,
           duration: 500,
         });
 
-        // Game Over text
-        this.time.delayedCall(300, () => {
-          const gameOverText = this.add
-            .text(width / 2, height / 2 - 100, "TRIAL COMPLETE", {
-              fontSize: "48px",
-              color: "#FFD700",
-              fontFamily: "Cinzel, serif",
-              fontStyle: "bold",
-              stroke: "#8B4513",
-              strokeThickness: 6,
-            })
-            .setOrigin(0.5)
-            .setDepth(301)
-            .setAlpha(0);
+        // Game over text
+        this.time.delayedCall(400, () => {
+          const gameOverText = this.add.text(width / 2, height / 2 - 120, 
+            'RUN COMPLETE!', {
+              fontSize: '56px',
+              color: '#FFD700',
+              fontFamily: 'Arial Black, sans-serif',
+              stroke: '#8B0000',
+              strokeThickness: 8,
+            }
+          ).setOrigin(0.5).setDepth(1001).setAlpha(0);
 
-          // Stats
-          const statsText = this.add
-            .text(
-              width / 2,
-              height / 2,
-              `Score: ${this.score}\nCoins: ${this.coins}\nDistance: ${this.distance}m`,
-              {
-                fontSize: "24px",
-                color: "#FFF",
-                fontFamily: "Cinzel, serif",
-                align: "center",
-                lineSpacing: 10,
-              }
-            )
-            .setOrigin(0.5)
-            .setDepth(301)
-            .setAlpha(0);
+          const statsText = this.add.text(width / 2, height / 2,
+            `Final Score: ${this.score}\n` +
+            `Coins Collected: ${this.coins}\n` +
+            `Distance: ${Math.floor(this.distance)}m`,
+            {
+              fontSize: '28px',
+              color: '#FFF',
+              fontFamily: 'Arial, sans-serif',
+              align: 'center',
+              lineSpacing: 12,
+            }
+          ).setOrigin(0.5).setDepth(1001).setAlpha(0);
 
-          // Fade in game over UI
           this.tweens.add({
             targets: [gameOverText, statsText],
             alpha: 1,
@@ -571,46 +779,32 @@ const Game = () => {
           });
         });
 
-        // Save score to backend
+        // Save score
         try {
-          await this.saveScore();
-        } catch (error) {
-          console.error("Failed to save score:", error);
-        }
-
-        // Redirect to dashboard
-        this.time.delayedCall(3000, () => {
-          this.cameras.main.fadeOut(800);
-        });
-
-        this.cameras.main.once("camerafadeoutcomplete", () => {
-          // Notify React component
-          if (window.onGameComplete) {
-            window.onGameComplete({
-              score: this.score,
-              coins: this.coins,
-              distance: this.distance,
-            });
-          }
-        });
-      }
-
-      // ============================================================
-      // SAVE SCORE TO BACKEND
-      // ============================================================
-      async saveScore() {
-        try {
-          const response = await gameAPI.updateScore({
+          await gameAPI.updateScore({
             score: this.score,
             coinsCollected: this.coins,
             timeSpent: Math.floor(this.distance / 10),
             completed: true,
           });
-          
-          console.log("Score saved successfully:", response.data);
         } catch (error) {
-          console.error("Error saving score:", error);
+          console.error("Save failed:", error);
         }
+
+        // Redirect
+        this.time.delayedCall(3500, () => {
+          this.cameras.main.fadeOut(800);
+        });
+
+        this.cameras.main.once('camerafadeoutcomplete', () => {
+          if (window.onGameComplete) {
+            window.onGameComplete({
+              score: this.score,
+              coins: this.coins,
+              distance: Math.floor(this.distance),
+            });
+          }
+        });
       }
 
       // ============================================================
@@ -619,20 +813,21 @@ const Game = () => {
       increaseDifficulty() {
         if (this.gameOver) return;
         
-        this.difficulty += 0.1;
-        this.currentSpeed = Math.min(this.baseSpeed * this.difficulty, 450);
+        this.difficulty += 0.15;
+        this.currentSpeed = Math.min(this.baseSpeed * this.difficulty, 600);
         
-        // Decrease spawn intervals
-        this.obstacleInterval = Math.max(1000, this.obstacleInterval - 50);
-        this.coinInterval = Math.max(800, this.coinInterval - 40);
+        this.obstacleInterval = Math.max(1200, this.obstacleInterval - 100);
+        this.coinInterval = Math.max(1000, this.coinInterval - 80);
         
-        // Update timers
         if (this.obstacleTimer) {
           this.obstacleTimer.delay = this.obstacleInterval;
         }
         if (this.coinTimer) {
           this.coinTimer.delay = this.coinInterval;
         }
+
+        // Update speed display
+        this.speedText.setText(`Speed: ${this.difficulty.toFixed(1)}x`);
       }
 
       // ============================================================
@@ -641,96 +836,72 @@ const Game = () => {
       update(time, delta) {
         if (!this.started || this.gameOver || this.isPaused) return;
 
-        // Parallax scrolling
-        const scrollSpeed = this.currentSpeed / 100;
-        this.bg1.tilePositionX += scrollSpeed * 1.5;
-        this.bg2.tilePositionX += scrollSpeed * 0.8;
+        // Move ground tiles (perspective effect)
+        this.groundTiles.children.entries.forEach((tile, index) => {
+          tile.tilePositionY -= this.currentSpeed * delta * 0.001 * (1 + index * 0.1);
+        });
 
-        // Update dust trail position
-        this.dustEmitter.setPosition(
-          this.player.x - 20,
-          this.player.y + 20
-        );
+        // Move lane markers
+        this.laneMarkers.children.entries.forEach((marker) => {
+          marker.y += this.currentSpeed * delta * 0.01;
+          if (marker.y > this.scale.height) {
+            marker.y = this.scale.height / 2 - 500;
+          }
+        });
+
+        // Parallax mountains
+        this.mountains.tilePositionY += this.currentSpeed * delta * 0.0002;
+
+        // Update dust
+        this.dustEmitter.setPosition(this.player.x, this.player.y + 30);
 
         // Update distance
-        this.distance += scrollSpeed * 2;
-        this.distanceText.setText(Math.floor(this.distance) + "m");
+        this.distance += this.currentSpeed * delta * 0.001;
+        this.distanceText.setText(Math.floor(this.distance) + 'm');
 
-        // Cleanup off-screen objects
-        this.obstacles.children.iterate((obj) => {
-          if (obj && obj.x < -100) {
-            obj.destroy();
-          }
-        });
+        // Check collisions
+        this.checkCollisions();
 
-        this.coins.children.iterate((obj) => {
-          if (obj && obj.x < -100) {
-            obj.destroy();
-          }
-        });
-
-        // Keyboard jump support
-        if (this.cursors.up.isDown || this.cursors.space?.isDown) {
-          this.handleJump();
+        // Keyboard controls
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) {
+          this.moveLeft();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) {
+          this.moveRight();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+          this.jump();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+          this.slide();
         }
       }
 
       // ============================================================
-      // PAUSE/RESUME - FIXED
+      // PAUSE/RESUME
       // ============================================================
       pauseGame() {
         if (!this.started || this.gameOver) return;
-        
         this.isPaused = true;
-        this.physics.pause();
-        
-        // Fix: Check if timers exist before pausing
-        if (this.obstacleTimer) {
-          this.obstacleTimer.paused = true;
-        }
-        if (this.coinTimer) {
-          this.coinTimer.paused = true;
-        }
-        if (this.difficultyTimer) {
-          this.difficultyTimer.paused = true;
-        }
+        this.scene.pause();
       }
 
       resumeGame() {
         if (!this.started || this.gameOver) return;
-        
         this.isPaused = false;
-        this.physics.resume();
-        
-        // Fix: Check if timers exist before resuming
-        if (this.obstacleTimer) {
-          this.obstacleTimer.paused = false;
-        }
-        if (this.coinTimer) {
-          this.coinTimer.paused = false;
-        }
-        if (this.difficultyTimer) {
-          this.difficultyTimer.paused = false;
-        }
+        this.scene.resume();
       }
     }
 
     // ============================================================
-    // PHASER GAME CONFIGURATION
+    // PHASER CONFIG
     // ============================================================
     const config = {
       type: Phaser.AUTO,
       width: window.innerWidth,
       height: window.innerHeight,
       parent: "phaser-container",
-      backgroundColor: "#1a1a1a",
-      physics: {
-        default: "arcade",
-        arcade: {
-          gravity: { y: 0 },
-          debug: false, // Set to true for hitbox debugging
-        },
-      },
+      backgroundColor: "#87CEEB",
       scene: MainScene,
       scale: {
         mode: Phaser.Scale.RESIZE,
@@ -738,16 +909,12 @@ const Game = () => {
       },
     };
 
-    // Create game instance
     gameRef.current = new Phaser.Game(config);
     sceneRef.current = gameRef.current.scene.scenes[0];
     
-    // Mark as loaded
     setGameState((prev) => ({ ...prev, isLoading: false }));
 
-    // ============================================================
-    // GAME COMPLETION CALLBACK
-    // ============================================================
+    // Completion callback
     window.onGameComplete = async (results) => {
       setGameState({
         isLoading: false,
@@ -757,7 +924,6 @@ const Game = () => {
         distance: results.distance,
       });
 
-      // Update user points in global state
       try {
         const response = await gameAPI.getStats();
         if (response.data.success) {
@@ -766,18 +932,14 @@ const Game = () => {
           });
         }
       } catch (error) {
-        console.error("Failed to update user stats:", error);
+        console.error("Failed to update stats:", error);
       }
 
-      // Navigate back to dashboard
       setTimeout(() => {
         navigate("/dashboard");
       }, 500);
     };
 
-    // ============================================================
-    // CLEANUP ON UNMOUNT
-    // ============================================================
     return () => {
       if (gameRef.current) {
         gameRef.current.destroy(true);
@@ -788,9 +950,6 @@ const Game = () => {
     };
   }, [navigate, updateUser]);
 
-  // ============================================================
-  // PAUSE/RESUME HANDLERS (External UI)
-  // ============================================================
   const handlePause = () => {
     if (sceneRef.current) {
       sceneRef.current.pauseGame();
@@ -806,65 +965,61 @@ const Game = () => {
   };
 
   const handleQuit = () => {
-    if (window.confirm("Are you sure you want to quit? Progress will be lost.")) {
+    if (window.confirm("Quit run? Progress will be lost.")) {
       navigate("/dashboard");
     }
   };
 
-  // ============================================================
-  // RENDER
-  // ============================================================
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden">
-      {/* Loading Screen */}
       {gameState.isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-arena-black z-50">
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-sky-400 to-orange-200 z-50">
           <div className="text-center">
-            <div className="spinner mx-auto mb-4"></div>
-            <p className="text-arena-gold text-xl font-arena">
-              Loading Trial...
-            </p>
+            <div className="text-6xl mb-4 animate-bounce">🏃‍♀️</div>
+            <div className="text-2xl text-gray-800 font-bold">
+              Preparing Temple Run...
+            </div>
           </div>
         </div>
       )}
 
-      {/* Game Container */}
       <div id="phaser-container" className="w-full h-full"></div>
 
-      {/* Pause Overlay */}
       {gameState.isPaused && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-40">
-          <div className="arena-card p-8 text-center">
-            <h2 className="text-3xl font-bold text-arena-gold mb-6">
-              PAUSED
+        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-40">
+          <div className="bg-gradient-to-b from-orange-500 to-red-600 p-8 rounded-2xl shadow-2xl border-4 border-yellow-400">
+            <h2 className="text-4xl font-bold text-white mb-6 text-center">
+              ⏸️ PAUSED
             </h2>
             <div className="space-y-4">
-              <button onClick={handleResume} className="arena-button w-full">
-                Resume
+              <button 
+                onClick={handleResume}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-xl text-xl transition-all transform hover:scale-105"
+              >
+                ▶️ Resume Run
               </button>
               <button
                 onClick={handleQuit}
-                className="bg-red-900 hover:bg-red-800 text-white font-bold py-3 px-6 rounded-lg w-full"
+                className="w-full bg-red-900 hover:bg-red-800 text-white font-bold py-4 px-8 rounded-xl text-xl transition-all transform hover:scale-105"
               >
-                Quit to Dashboard
+                🚪 Quit to Dashboard
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Control Buttons (Top Right) */}
       {!gameState.isLoading && (
-        <div className="absolute top-4 right-4 flex gap-2 z-30">
-          {!gameState.isPaused ? (
+        <div className="absolute top-4 right-4 z-30">
+          {!gameState.isPaused && (
             <button
               onClick={handlePause}
-              className="bg-arena-red/80 hover:bg-arena-red text-white p-3 rounded-lg backdrop-blur-sm"
+              className="bg-orange-600/90 hover:bg-orange-700 text-white p-4 rounded-xl backdrop-blur-sm shadow-lg text-2xl transition-all transform hover:scale-110"
               title="Pause"
             >
               ⏸️
             </button>
-          ) : null}
+          )}
         </div>
       )}
     </div>
