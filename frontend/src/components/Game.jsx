@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+
 import Phaser from "phaser";
 
 const RunnerGame = () => {
