@@ -1,6 +1,15 @@
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
 
+// Import assets from src/assets
+import bgShebaTemple from "../assets/bg-sheba-temple.png";
+import playerGuardian from "../assets/player-guardian.png";
+import coinGold from "../assets/coin-gold.png";
+import obstaclePillar from "../assets/obstacle-pillar.png";
+import uiFrame from "../assets/ui-frame.png";
+import uiButton from "../assets/ui-button.png";
+import uiBanner from "../assets/ui-banner.png";
+
 const Game = () => {
   const gameRef = useRef(null);
 
@@ -18,57 +27,33 @@ const Game = () => {
       }
 
       preload() {
-        // Background
-        this.load.image("bg1", "/assets/bg-sheba-temple.png");
-
-        // Player + FX
-        this.load.image("player", "/assets/player-guardian.png");
-        this.load.image("dust", "/assets/dust.png");
-
-        // Objects
-        this.load.image("coin", "/assets/coin-gold.png");
-        this.load.image("obstacle", "/assets/obstacle-pillar.png");
-
-        // UI
-        this.load.image("banner", "/assets/ui-banner.png");
-        this.load.image("button", "/assets/ui-button.png");
+        this.load.image("bg1", bgShebaTemple);
+        this.load.image("player", playerGuardian);
+        this.load.image("coin", coinGold);
+        this.load.image("obstacle", obstaclePillar);
+        this.load.image("frame", uiFrame);
+        this.load.image("button", uiButton);
+        this.load.image("banner", uiBanner);
       }
 
       create() {
         const { width, height } = this.scale;
 
-        // Fade in
         this.cameras.main.fadeIn(600);
 
-        // Background
         this.bg1 = this.add.tileSprite(0, 0, width, height, "bg1").setOrigin(0);
 
-        // Ground
         this.ground = this.physics.add.staticGroup();
         this.ground.create(0, height - 40, "bg1")
           .setOrigin(0, 0)
           .setDisplaySize(width, 40)
           .refreshBody();
 
-        // Player
         this.player = this.physics.add.sprite(120, height - 120, "player");
-        this.player.setGravityY(900);
         this.player.setCollideWorldBounds(true);
+        this.player.body.allowGravity = false; // prevent falling before start
         this.physics.add.collider(this.player, this.ground);
 
-        // Dust trail
-        this.dust = this.add.particles("dust");
-        this.dustEmitter = this.dust.createEmitter({
-          x: this.player.x - 20,
-          y: this.player.y + 20,
-          speedX: { min: -50, max: -150 },
-          speedY: { min: -10, max: 10 },
-          scale: { start: 0.4, end: 0 },
-          lifespan: 300,
-          quantity: 0,
-        });
-
-        // Score UI
         this.add.image(width / 2, 50, "banner").setScale(0.6);
         this.scoreText = this.add.text(width / 2, 50, "0", {
           fontSize: "28px",
@@ -76,15 +61,12 @@ const Game = () => {
           fontFamily: "serif",
         }).setOrigin(0.5);
 
-        // Groups
         this.obstacles = this.physics.add.group();
         this.coins = this.physics.add.group();
 
-        // Collisions
         this.physics.add.overlap(this.player, this.coins, this.collectCoin, null, this);
         this.physics.add.overlap(this.player, this.obstacles, this.hitObstacle, null, this);
 
-        // Intro screen
         this.showIntro();
       }
 
@@ -119,7 +101,8 @@ const Game = () => {
         this.startButton.destroy();
         this.startLabel.destroy();
 
-        this.dustEmitter.setQuantity(2);
+        this.player.body.allowGravity = true;
+        this.player.setGravityY(900);
 
         this.time.addEvent({
           delay: 1500,
@@ -138,7 +121,6 @@ const Game = () => {
 
       spawnObstacle() {
         if (!this.started || this.gameOver) return;
-
         const { width, height } = this.scale;
         const obs = this.obstacles.create(width + 50, height - 80, "obstacle");
         obs.setVelocityX(-260);
@@ -147,7 +129,6 @@ const Game = () => {
 
       spawnCoin() {
         if (!this.started || this.gameOver) return;
-
         const { width } = this.scale;
         const y = Phaser.Math.Between(150, 350);
         const coin = this.coins.create(width + 50, y, "coin");
@@ -162,7 +143,6 @@ const Game = () => {
 
       hitObstacle() {
         if (this.gameOver) return;
-
         this.gameOver = true;
         this.physics.pause();
         this.player.setTint(0xff0000);
@@ -170,7 +150,6 @@ const Game = () => {
       }
 
       showGameOver() {
-        const { width, height } = this.scale;
         this.cameras.main.fadeOut(800);
         this.time.delayedCall(900, () => {
           window.location.href = "/dashboard";
@@ -179,14 +158,11 @@ const Game = () => {
 
       update() {
         if (!this.started || this.gameOver) return;
-
         this.bg1.tilePositionX += 1.2;
-        this.dustEmitter.setPosition(this.player.x - 20, this.player.y + 20);
 
         this.obstacles.children.iterate((o) => {
           if (o && o.x < -50) o.destroy();
         });
-
         this.coins.children.iterate((c) => {
           if (c && c.x < -50) c.destroy();
         });
