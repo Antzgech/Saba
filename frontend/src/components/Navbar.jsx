@@ -1,56 +1,41 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '../store';
-import { Trophy, LogOut, User } from 'lucide-react';
 
 const Navbar = () => {
-  const { user, isAuthenticated, logout } = useAuthStore();
-  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
+  if (!isAuthenticated) return null; // Hide navbar on login page
 
-  if (!isAuthenticated) return null;
+  const navItems = [
+    { path: "/dashboard", label: "Home", icon: "🏛️" },
+    { path: "/game", label: "Game", icon: "🎮" },
+    { path: "/social", label: "Tasks", icon: "📜" },
+    { path: "/leaderboard", label: "Ranks", icon: "👑" },
+    { path: "/profile", label: "Profile", icon: "⚔️" },
+  ];
 
   return (
-    <nav className="bg-dark-800 border-b border-dark-700">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          <Link to="/dashboard" className="flex items-center gap-2 font-display font-bold text-xl">
-            <Trophy className="w-6 h-6 text-primary-500" />
-            <span className="gradient-text">Rewards</span>
-          </Link>
+    <div className="fixed bottom-0 left-0 w-full bg-[#0A1A2F]/95 border-t border-[#D4A857]/20 backdrop-blur-lg z-50">
+      <div className="flex justify-around py-3">
 
-          <div className="flex items-center gap-6">
-            <Link to="/dashboard" className="text-gray-300 hover:text-white transition-colors">
-              Dashboard
-            </Link>
-            <Link to="/leaderboard" className="text-gray-300 hover:text-white transition-colors">
-              Leaderboard
-            </Link>
-            <Link to="/game" className="text-gray-300 hover:text-white transition-colors">
-              Play
-            </Link>
-            
-            <div className="flex items-center gap-3 pl-6 border-l border-dark-700">
-              <div className="text-right">
-                <div className="text-sm font-semibold">{user?.firstName || user?.username}</div>
-                <div className="text-xs text-primary-500">{user?.totalPoints} pts</div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="p-2 hover:bg-dark-700 rounded-lg transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
+        {navItems.map((item, i) => (
+          <NavLink
+            key={i}
+            to={item.path}
+            className={({ isActive }) =>
+              `flex flex-col items-center text-xs transition ${
+                isActive ? "text-gold-400" : "text-gray-300"
+              }`
+            }
+          >
+            <span className="text-xl">{item.icon}</span>
+            <span className="mt-1">{item.label}</span>
+          </NavLink>
+        ))}
+
       </div>
-    </nav>
+    </div>
   );
 };
 
