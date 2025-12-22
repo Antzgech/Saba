@@ -3,10 +3,13 @@ import './HomePage.css';
 
 function HomePage({ setUser }) {
   useEffect(() => {
-    // Initialize Telegram Web Login widget
+    // Create Telegram Login Widget script
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'sabawians_bot');
+    script.setAttribute(
+      'data-telegram-login',
+      process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'sabawians_bot'
+    );
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-radius', '8');
     script.setAttribute('data-request-access', 'write');
@@ -15,25 +18,28 @@ function HomePage({ setUser }) {
 
     const loginContainer = document.getElementById('telegram-login-container');
     if (loginContainer) {
+      loginContainer.innerHTML = ''; // Prevent duplicate widgets
       loginContainer.appendChild(script);
     }
 
-    // Define the auth callback
+    // Global callback for Telegram Login
     window.onTelegramAuth = async (user) => {
       try {
-        // Send auth data to backend
-        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/auth/telegram`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(user),
-        });
+        const response = await fetch(
+          `${process.env.REACT_APP_API_URL}/auth/telegram`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(user),
+          }
+        );
 
         if (response.ok) {
           const data = await response.json();
           localStorage.setItem('axum_token', data.token);
-          setUser(data.user);
+          setUser(data.user); // Move to dashboard or next page
         } else {
           console.error('Authentication failed');
         }
@@ -51,25 +57,25 @@ function HomePage({ setUser }) {
     <div className="home-page">
       <div className="home-hero">
         <div className="hero-background"></div>
-        
+
         <div className="hero-content">
           <div className="hero-icon-large">⚜️</div>
-          
+
           <h1 className="hero-title">
             <span className="title-line">WELCOME TO</span>
             <span className="title-main">AXUM</span>
           </h1>
-          
+
           <p className="hero-subtitle">
             Join Queen Makeda's quest to find the wisest and most courageous
           </p>
-          
+
           <div className="hero-description">
             <p>
-              In the ancient land of Saba, Queen Makeda seeks worthy companions 
-              for her legendary journey to Jerusalem. Prove your wisdom and courage 
-              through challenges, earn divine rewards, and compete for the honor 
-              of joining her quest.
+              In the ancient land of Saba, Queen Makeda seeks worthy companions
+              for her legendary journey to Jerusalem. Prove your wisdom and
+              courage through challenges, earn divine rewards, and compete for
+              the honor of joining her quest.
             </p>
           </div>
 
@@ -79,7 +85,10 @@ function HomePage({ setUser }) {
               <p className="login-text">
                 Connect your Telegram account to enter the realm of Axum
               </p>
-              <div id="telegram-login-container" className="telegram-login"></div>
+              <div
+                id="telegram-login-container"
+                className="telegram-login"
+              ></div>
             </div>
           </div>
 
