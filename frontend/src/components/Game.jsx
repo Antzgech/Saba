@@ -23,7 +23,7 @@ const Game = () => {
         super({ key: "MainScene" });
         this.player = null;
         this.score = 0;
-        this.coinsCollected = 0; // FIXED: Renamed from this.coins
+        this.coinsCollected = 0;
         this.distance = 0;
         this.gameTime = 0;
         this.level = 1;
@@ -44,7 +44,7 @@ const Game = () => {
       createGraphics() {
         const g = this.make.graphics({ add: false });
         
-        // PLAYER CAR - Cyan glass
+        // PLAYER CAR
         g.clear();
         g.fillStyle(0x00D9FF, 1);
         g.fillRoundedRect(5, 10, 50, 80, 12);
@@ -60,7 +60,7 @@ const Game = () => {
         g.fillCircle(42, 85, 4);
         g.generateTexture('player', 60, 90);
         
-        // OBSTACLE CAR - Red
+        // OBSTACLE CAR
         g.clear();
         g.fillStyle(0xFF3366, 1);
         g.fillRoundedRect(5, 10, 50, 80, 12);
@@ -73,7 +73,7 @@ const Game = () => {
         g.fillCircle(45, 75, 8);
         g.generateTexture('car', 60, 90);
         
-        // ROCK - Purple crystal
+        // ROCK
         g.clear();
         g.fillStyle(0x9D4EDD, 1);
         g.beginPath();
@@ -88,7 +88,7 @@ const Game = () => {
         g.fillCircle(40, 35, 15);
         g.generateTexture('rock', 80, 80);
         
-        // COIN - Golden orb
+        // COIN
         g.clear();
         g.fillStyle(0xFFD700, 1);
         g.fillCircle(25, 25, 18);
@@ -118,15 +118,14 @@ const Game = () => {
       create() {
         const { width, height } = this.scale;
         
-        // Background gradient
+        // Background
         const bg = this.add.graphics();
         bg.fillGradientStyle(0x667eea, 0x667eea, 0x764ba2, 0x764ba2, 1, 1, 1, 1);
         bg.fillRect(0, 0, width, height);
         
-        // Lane setup
         this.laneWidth = width / 3;
         
-        // Ground tiles
+        // Ground
         this.groundTiles = [];
         for (let i = 0; i < 8; i++) {
           const tile = this.add.tileSprite(width / 2, height - 200 + (i * 120), width * 0.8, 120, 'ground');
@@ -134,7 +133,7 @@ const Game = () => {
           this.groundTiles.push(tile);
         }
         
-        // Lane lines with glow
+        // Lane lines
         const leftLine = this.add.rectangle(this.laneWidth, 0, 6, height, 0x00D9FF, 0.5).setOrigin(0.5, 0);
         const rightLine = this.add.rectangle(this.laneWidth * 2, 0, 6, height, 0x00D9FF, 0.5).setOrigin(0.5, 0);
         
@@ -162,24 +161,23 @@ const Game = () => {
         // UI
         this.createUI();
         
-        // Groups - FIXED: Renamed to avoid conflict
-        this.obstaclesGroup = this.add.group(); // Was this.obstacles
-        this.coinsGroup = this.add.group();     // Was this.coins
+        // Groups
+        this.obstaclesGroup = this.add.group();
+        this.coinsGroup = this.add.group();
         
-        // Particle system for effects
+        // Particles
         this.particles = this.add.particles('particle');
         
         // Controls
         this.setupControls();
         
-        // Show intro
         this.showIntro();
       }
 
       createUI() {
         const { width, height } = this.scale;
         
-        // Top panel background
+        // Top panel
         const panel = this.add.graphics();
         panel.fillStyle(0x000000, 0.4);
         panel.fillRoundedRect(10, 10, width - 20, 150, 20);
@@ -187,7 +185,7 @@ const Game = () => {
         panel.strokeRoundedRect(10, 10, width - 20, 150, 20);
         panel.setDepth(900);
         
-        // Username badge
+        // Username
         const userBadge = this.add.graphics();
         userBadge.fillStyle(0x00D9FF, 0.3);
         userBadge.fillRoundedRect(25, 25, 220, 45, 12);
@@ -202,11 +200,10 @@ const Game = () => {
           fontStyle: 'bold',
         }).setOrigin(0, 0.5).setDepth(902);
         
-        // Stats row
+        // Stats
         const statsY = 95;
         const statsSpacing = (width - 80) / 3;
         
-        // Score
         this.add.text(40, statsY, 'SCORE', {
           fontSize: '14px',
           color: '#FFFFFF',
@@ -221,7 +218,6 @@ const Game = () => {
           fontStyle: 'bold',
         }).setDepth(901);
         
-        // Time
         this.add.text(40 + statsSpacing, statsY, 'TIME', {
           fontSize: '14px',
           color: '#FFFFFF',
@@ -236,7 +232,6 @@ const Game = () => {
           fontStyle: 'bold',
         }).setDepth(901);
         
-        // Level
         this.add.text(40 + statsSpacing * 2, statsY, 'LEVEL', {
           fontSize: '14px',
           color: '#FFFFFF',
@@ -251,7 +246,7 @@ const Game = () => {
           fontStyle: 'bold',
         }).setDepth(901);
         
-        // Coins badge (bottom left)
+        // Coins badge
         const coinBadge = this.add.graphics();
         coinBadge.fillStyle(0xFFD700, 0.3);
         coinBadge.fillRoundedRect(20, height - 80, 160, 60, 15);
@@ -270,7 +265,7 @@ const Game = () => {
           fontStyle: 'bold',
         }).setOrigin(0, 0.5).setDepth(901);
         
-        // Distance badge (bottom right)
+        // Distance badge
         const distBadge = this.add.graphics();
         distBadge.fillStyle(0x00D9FF, 0.3);
         distBadge.fillRoundedRect(width - 180, height - 80, 160, 60, 15);
@@ -438,7 +433,6 @@ const Game = () => {
             this.level++;
             this.currentSpeed = Math.min(this.currentSpeed + 40, 550);
             this.levelText.setText(this.level);
-            console.log(`🎚️ Level ${this.level}! Speed: ${this.currentSpeed}`);
             this.showLevelUp();
           },
           callbackScope: this,
@@ -522,7 +516,7 @@ const Game = () => {
         const obs = this.add.sprite(x, -100, isCar ? 'car' : 'rock');
         obs.setData('lane', lane);
         obs.setScale(0.8);
-        this.obstaclesGroup.add(obs); // FIXED: Use renamed group
+        this.obstaclesGroup.add(obs);
         
         this.tweens.add({
           targets: obs,
@@ -547,9 +541,8 @@ const Game = () => {
         coin.setData('collected', false);
         coin.setScale(0.8);
         coin.setDepth(50);
-        this.coinsGroup.add(coin); // FIXED: Use renamed group
+        this.coinsGroup.add(coin);
         
-        // Floating animation
         this.tweens.add({
           targets: coin,
           angle: 360,
@@ -557,7 +550,6 @@ const Game = () => {
           repeat: -1,
         });
         
-        // Pulse effect
         this.tweens.add({
           targets: coin,
           scale: 0.9,
@@ -566,7 +558,6 @@ const Game = () => {
           repeat: -1,
         });
         
-        // Move down
         this.tweens.add({
           targets: coin,
           y: height + 100,
@@ -581,7 +572,8 @@ const Game = () => {
       }
 
       checkCollisions() {
-        if (!this.started || this.gameOver) return;
+        // CRITICAL: Don't check if game is paused or over
+        if (!this.started || this.gameOver || this.isPaused) return;
         
         const playerY = this.player.y;
         const playerLane = this.currentLane;
@@ -600,7 +592,9 @@ const Game = () => {
           }
         });
         
-        // Check coins - FIXED with proper juice!
+        // Check coins - FIXED: No async, no pause, just instant collection
+        const coinsToCollect = [];
+        
         this.coinsGroup.children.entries.forEach((coin) => {
           if (!coin.active || coin.getData('collected')) return;
           
@@ -608,76 +602,87 @@ const Game = () => {
           const coinLane = coin.getData('lane');
           
           if (coinLane === playerLane && Math.abs(coinY - playerY) < 55) {
-            // Mark collected FIRST
-            coin.setData('collected', true);
-            
-            // VISUAL JUICE - Particle burst
-            const emitter = this.particles.createEmitter({
-              x: coin.x,
-              y: coin.y,
-              speed: { min: 100, max: 300 },
-              angle: { min: 0, max: 360 },
-              scale: { start: 1.5, end: 0 },
-              alpha: { start: 1, end: 0 },
-              tint: 0xFFD700,
-              lifespan: 600,
-              blendMode: 'ADD',
-              quantity: 20,
-            });
-            emitter.explode();
-            
-            // VISUAL JUICE - Floating +10 text
-            const plusText = this.add.text(coin.x, coin.y, '+10', {
-              fontSize: '32px',
-              color: '#FFD700',
-              fontFamily: 'Arial',
-              fontStyle: 'bold',
-              stroke: '#000',
-              strokeThickness: 4,
-            }).setOrigin(0.5).setDepth(200);
-            
-            this.tweens.add({
-              targets: plusText,
-              y: coin.y - 80,
-              alpha: 0,
-              duration: 800,
-              ease: 'Quad.easeOut',
-              onComplete: () => plusText.destroy()
-            });
-            
-            // VISUAL JUICE - Score text pop
-            this.tweens.add({
-              targets: this.scoreText,
-              scale: 1.2,
-              duration: 100,
-              yoyo: true,
-              ease: 'Quad.easeOut',
-            });
-            
-            // VISUAL JUICE - Coin badge pulse
-            this.tweens.add({
-              targets: this.coinText,
-              scale: 1.3,
-              duration: 100,
-              yoyo: true,
-              ease: 'Back.easeOut',
-            });
-            
-            // Update score (local only - no database)
-            this.coinsCollected++; // FIXED: Use renamed variable
-            this.score += 10;
-            
-            // Update UI
-            this.scoreText.setText(this.score);
-            this.coinText.setText(this.coinsCollected);
-            
-            // Destroy coin immediately
-            coin.destroy();
-            
-            // Clean up emitter
-            this.time.delayedCall(600, () => emitter.remove());
+            coinsToCollect.push(coin);
           }
         });
+        
+        // Process all coin collections in one go
+        coinsToCollect.forEach((coin) => {
+          this.collectCoin(coin);
+        });
+      }
+
+      collectCoin(coin) {
+        // CRITICAL: Mark as collected FIRST to prevent re-collection
+        coin.setData('collected', true);
+        
+        // Particle burst (non-blocking)
+        const emitter = this.particles.createEmitter({
+          x: coin.x,
+          y: coin.y,
+          speed: { min: 100, max: 300 },
+          angle: { min: 0, max: 360 },
+          scale: { start: 1.5, end: 0 },
+          alpha: { start: 1, end: 0 },
+          tint: 0xFFD700,
+          lifespan: 600,
+          blendMode: 'ADD',
+          quantity: 20,
+        });
+        emitter.explode();
+        
+        // Floating +10 text (non-blocking)
+        const plusText = this.add.text(coin.x, coin.y, '+10', {
+          fontSize: '32px',
+          color: '#FFD700',
+          fontFamily: 'Arial',
+          fontStyle: 'bold',
+          stroke: '#000',
+          strokeThickness: 4,
+        }).setOrigin(0.5).setDepth(200);
+        
+        this.tweens.add({
+          targets: plusText,
+          y: coin.y - 80,
+          alpha: 0,
+          duration: 800,
+          ease: 'Quad.easeOut',
+          onComplete: () => plusText.destroy()
+        });
+        
+        // Score pop (non-blocking)
+        this.tweens.add({
+          targets: this.scoreText,
+          scale: 1.2,
+          duration: 100,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+        });
+        
+        // Coin badge pulse (non-blocking)
+        this.tweens.add({
+          targets: this.coinText,
+          scale: 1.3,
+          duration: 100,
+          yoyo: true,
+          ease: 'Back.easeOut',
+        });
+        
+        // Update score (INSTANT - no database)
+        this.coinsCollected++;
+        this.score += 10;
+        
+        // Update UI (INSTANT)
+        this.scoreText.setText(this.score);
+        this.coinText.setText(this.coinsCollected);
+        
+        // Destroy coin (INSTANT)
+        coin.destroy();
+        
+        // Clean up emitter after animation
+        this.time.delayedCall(600, () => emitter.remove());
+        
+        // CRITICAL: DO NOT PAUSE, DO NOT STOP, GAME CONTINUES!
       }
 
       hitObstacle() {
@@ -686,11 +691,9 @@ const Game = () => {
         console.log("💥 Game over!");
         this.gameOver = true;
         
-        // Visual feedback
         this.player.setTint(0xFF0000);
         this.cameras.main.shake(300, 0.02);
         
-        // Explosion particles
         const explosion = this.particles.createEmitter({
           x: this.player.x,
           y: this.player.y,
@@ -748,7 +751,6 @@ const Game = () => {
           }
         ).setOrigin(0.5).setDepth(2002);
         
-        // Save to database ONCE
         console.log("💾 Saving to database...");
         try {
           await gameAPI.updateScore({
@@ -782,6 +784,7 @@ const Game = () => {
       }
 
       update(time, delta) {
+        // CRITICAL: Check for pause/game over before processing
         if (!this.started || this.gameOver || this.isPaused) return;
         
         this.gameTime = (this.time.now - this.startTime) / 1000;
@@ -794,6 +797,7 @@ const Game = () => {
         this.distance += this.currentSpeed * delta * 0.001;
         this.distanceText.setText(Math.floor(this.distance) + 'm');
         
+        // CRITICAL: Collision check is non-blocking
         this.checkCollisions();
         
         if (Phaser.Input.Keyboard.JustDown(this.cursors.left) || 
