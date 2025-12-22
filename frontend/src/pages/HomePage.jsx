@@ -6,7 +6,7 @@ function HomePage({ setUser }) {
     // Initialize Telegram Web Login widget
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'AxumGameBot');
+    script.setAttribute('data-telegram-login', process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'sabawians_bot');
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-radius', '8');
     script.setAttribute('data-request-access', 'write');
@@ -22,7 +22,7 @@ function HomePage({ setUser }) {
     window.onTelegramAuth = async (user) => {
       try {
         // Send auth data to backend
-        const response = await fetch('/api/auth/telegram', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/telegram`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
