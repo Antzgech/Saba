@@ -1,11 +1,14 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './HomePage.css';
 
 function HomePage({ setUser }) {
+  const navigate = useNavigate();
+
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
 
-    // If inside Telegram WebApp, use automatic login
+    // Automatic login inside Telegram WebApp
     if (tg?.initDataUnsafe?.user) {
       const telegramUser = tg.initDataUnsafe.user;
 
@@ -21,6 +24,7 @@ function HomePage({ setUser }) {
             const data = await response.json();
             localStorage.setItem('axum_token', data.token);
             setUser(data.user);
+            navigate('/dashboard');
           } else {
             console.error('Auto-login failed');
           }
@@ -29,7 +33,7 @@ function HomePage({ setUser }) {
         }
       })();
     } else {
-      // Fallback: show Telegram login widget
+      // Fallback login widget
       const script = document.createElement('script');
       script.src = 'https://telegram.org/js/telegram-widget.js?22';
       script.setAttribute(
@@ -60,6 +64,7 @@ function HomePage({ setUser }) {
             const data = await response.json();
             localStorage.setItem('axum_token', data.token);
             setUser(data.user);
+            navigate('/dashboard');
           } else {
             console.error('Widget login failed');
           }
@@ -72,7 +77,7 @@ function HomePage({ setUser }) {
     return () => {
       window.onTelegramAuth = null;
     };
-  }, [setUser]);
+  }, [setUser, navigate]);
 
   return (
     <div className="home-page">
