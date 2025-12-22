@@ -153,4 +153,12 @@ function HomePage({ setUser }) {
             <div className="sponsor-placeholder">SABA Company</div>
             <div className="sponsor-placeholder">Partner 1</div>
             <div className="sponsor-placeholder">Partner 2</div>
-            <div className="sponsor-placeholder">
+            <div className="sponsor-placeholder">Partner 3</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default HomePage;
