@@ -3,50 +3,71 @@ import './HomePage.css';
 
 function HomePage({ setUser }) {
   useEffect(() => {
-    // Create Telegram Login Widget script
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute(
-      'data-telegram-login',
-      process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'sabawians_bot'
-    );
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '8');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    script.async = true;
+    const tg = window.Telegram?.WebApp;
 
-    const loginContainer = document.getElementById('telegram-login-container');
-    if (loginContainer) {
-      loginContainer.innerHTML = ''; // Prevent duplicate widgets
-      loginContainer.appendChild(script);
-    }
+    // If inside Telegram WebApp, use automatic login
+    if (tg?.initDataUnsafe?.user) {
+      const telegramUser = tg.initDataUnsafe.user;
 
-    // Global callback for Telegram Login
-    window.onTelegramAuth = async (user) => {
-      try {
-        const response = await fetch(
-          `${process.env.REACT_APP_API_URL}/auth/telegram`,
-          {
+      (async () => {
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/telegram`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(user),
-          }
-        );
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(telegramUser),
+          });
 
-        if (response.ok) {
-          const data = await response.json();
-          localStorage.setItem('axum_token', data.token);
-          setUser(data.user); // Move to dashboard or next page
-        } else {
-          console.error('Authentication failed');
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('axum_token', data.token);
+            setUser(data.user);
+          } else {
+            console.error('Auto-login failed');
+          }
+        } catch (error) {
+          console.error('Auto-login error:', error);
         }
-      } catch (error) {
-        console.error('Auth error:', error);
+      })();
+    } else {
+      // Fallback: show Telegram login widget
+      const script = document.createElement('script');
+      script.src = 'https://telegram.org/js/telegram-widget.js?22';
+      script.setAttribute(
+        'data-telegram-login',
+        process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'sabawians_bot'
+      );
+      script.setAttribute('data-size', 'large');
+      script.setAttribute('data-radius', '8');
+      script.setAttribute('data-request-access', 'write');
+      script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+      script.async = true;
+
+      const loginContainer = document.getElementById('telegram-login-container');
+      if (loginContainer) {
+        loginContainer.innerHTML = '';
+        loginContainer.appendChild(script);
       }
-    };
+
+      window.onTelegramAuth = async (user) => {
+        try {
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/telegram`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(user),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('axum_token', data.token);
+            setUser(data.user);
+          } else {
+            console.error('Widget login failed');
+          }
+        } catch (error) {
+          console.error('Widget login error:', error);
+        }
+      };
+    }
 
     return () => {
       window.onTelegramAuth = null;
@@ -85,10 +106,7 @@ function HomePage({ setUser }) {
               <p className="login-text">
                 Connect your Telegram account to enter the realm of Axum
               </p>
-              <div
-                id="telegram-login-container"
-                className="telegram-login"
-              ></div>
+              <div id="telegram-login-container" className="telegram-login"></div>
             </div>
           </div>
 
@@ -135,12 +153,4 @@ function HomePage({ setUser }) {
             <div className="sponsor-placeholder">SABA Company</div>
             <div className="sponsor-placeholder">Partner 1</div>
             <div className="sponsor-placeholder">Partner 2</div>
-            <div className="sponsor-placeholder">Partner 3</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default HomePage;
+            <div className="sponsor-placeholder">
