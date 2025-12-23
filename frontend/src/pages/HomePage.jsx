@@ -2,18 +2,57 @@ import { useEffect } from "react";
 import "./HomePage.css";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "sabawians_bot";
 
 export default function HomePage({ setUser }) {
   useEffect(() => {
-    fetch(`${API_URL}/api/auth/telegram`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" }
-    })
-      .then(res => res.json())
-      .then(data => {
+    // 1. Define Telegram callback BEFORE loading widget
+    window.onTelegramAuth = async (tgUser) => {
+      try {
+        const response = await fetch(`${API_URL}/api/auth/telegram`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(tgUser),
+        });
+
+        if (!response.ok) {
+          console.error("Authentication failed");
+          return;
+        }
+
+        const data = await response.json();
+
+        // Save token from backend
         localStorage.setItem("token", data.token);
+
+        // Set global user
         setUser(data.user);
-      });
+      } catch (err) {
+        console.error("Telegram auth error:", err);
+      }
+    };
+
+    // 2. Create Telegram login widget script
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.setAttribute("data-telegram-login", BOT_USERNAME);
+    script.setAttribute("data-size", "large");
+    script.setAttribute("data-radius", "8");
+    script.setAttribute("data-request-access", "write");
+    script.setAttribute("data-onauth", "onTelegramAuth(user)");
+    script.async = true;
+
+    // 3. Inject widget into container
+    const container = document.getElementById("telegram-login-container");
+    if (container) {
+      container.innerHTML = ""; // Clear previous widget
+      container.appendChild(script);
+    }
+
+    // 4. Cleanup on unmount
+    return () => {
+      window.onTelegramAuth = null;
+    };
   }, [setUser]);
 
   return (
@@ -40,6 +79,20 @@ export default function HomePage({ setUser }) {
               courage through challenges, earn rewards, and compete for the
               honor of joining her quest.
             </p>
+          </div>
+
+          <div className="login-section">
+            <div className="login-card">
+              <h2 className="login-title">Begin Your Journey</h2>
+              <p className="login-text">
+                Login with your Telegram account to enter the realm of Axum
+              </p>
+
+              <div
+                id="telegram-login-container"
+                className="telegram-login"
+              ></div>
+            </div>
           </div>
 
           <div className="features-grid">
