@@ -1,15 +1,23 @@
-// src/pages/HomePage.jsx
 import { useEffect } from "react";
 import "./HomePage.css";
 import Antz from "../lib/Antz";
 
+const API_URL = import.meta.env.VITE_API_URL || "";
+
 export default function HomePage({ setUser }) {
   useEffect(() => {
-    // Immediately set the dev user Antz (bypass login)
     try {
       localStorage.setItem("token", "dev-token-Antz");
       localStorage.setItem("user", JSON.stringify(Antz));
       setUser(Antz);
+
+      if (API_URL) {
+        fetch(`${API_URL}/api/auth/telegram`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error(e);
     }
