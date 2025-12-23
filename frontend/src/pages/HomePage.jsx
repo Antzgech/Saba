@@ -8,14 +8,21 @@ export default function HomePage({ setUser }) {
   useEffect(() => {
     // 0. AUTO‑LOGIN INSIDE TELEGRAM WEBAPP
     const tg = window.Telegram?.WebApp;
-    const telegramUser = tg?.initDataUnsafe?.user;
+    const raw = tg?.initDataUnsafe?.user;
 
-    if (telegramUser) {
-      // Auto-login using Telegram WebApp injected user
+    if (raw) {
+      // Build safe user object with fallback username
+      const user = {
+        id: raw.id,
+        first_name: raw.first_name,
+        username: raw.username || `ANTZ${raw.id}`,
+        photo_url: raw.photo_url || ""
+      };
+
       fetch(`${API_URL}/api/auth/telegram`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(telegramUser),
+        body: JSON.stringify(user),
       })
         .then((res) => res.json())
         .then((data) => {
@@ -28,7 +35,14 @@ export default function HomePage({ setUser }) {
     }
 
     // 1. Define Telegram callback BEFORE loading widget
-    window.onTelegramAuth = async (tgUser) => {
+    window.onTelegramAuth = async (rawUser) => {
+      const tgUser = {
+        id: rawUser.id,
+        first_name: rawUser.first_name,
+        username: rawUser.username || `ANTZ${rawUser.id}`,
+        photo_url: rawUser.photo_url || ""
+      };
+
       try {
         const response = await fetch(`${API_URL}/api/auth/telegram`, {
           method: "POST",
@@ -43,10 +57,7 @@ export default function HomePage({ setUser }) {
 
         const data = await response.json();
 
-        // Save token from backend
         localStorage.setItem("token", data.token);
-
-        // Set global user
         setUser(data.user);
       } catch (err) {
         console.error("Telegram auth error:", err);
@@ -66,17 +77,16 @@ export default function HomePage({ setUser }) {
     // 3. Inject widget into container
     const container = document.getElementById("telegram-login-container");
     if (container) {
-      container.innerHTML = ""; // Clear previous widget
+      container.innerHTML = "";
       container.appendChild(script);
     }
 
-    // 4. Cleanup on unmount
     return () => {
       window.onTelegramAuth = null;
     };
   }, [setUser]);
 
-  // Detect Telegram WebApp user (for conditional rendering)
+  // Detect Telegram WebApp user for conditional rendering
   const tg = window.Telegram?.WebApp;
   const telegramUser = tg?.initDataUnsafe?.user;
 
