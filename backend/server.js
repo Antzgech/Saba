@@ -7,33 +7,28 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Trust Railway proxy (important for HTTPS)
 app.set("trust proxy", 1);
 
-// CORS — allow Vercel + Telegram + Local Dev
 app.use(
   cors({
     origin: [
-      process.env.FRONTEND_URL,            // Your Vercel frontend
-      "https://telegram.org",              // Telegram widget
-      "https://web.telegram.org",          // Telegram browser
-      "https://t.me",                      // Telegram deep links
-      "http://localhost:5173"              // Local Vite dev
+      process.env.FRONTEND_URL,
+      "https://telegram.org",
+      "https://web.telegram.org",
+      "https://t.me",
+      "http://localhost:5173"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
 
-// Parse JSON
 app.use(express.json());
 
-// In-memory database (temporary)
 const users = new Map();
 const tasks = new Map();
 const rewards = new Map();
 
-// Default tasks
 const defaultTasks = [
   { id: '1', type: 'youtube', title: 'Subscribe to SABA YouTube Channel', points: 50, url: 'https://youtube.com/@saba', icon: '▶️' },
   { id: '2', type: 'telegram', title: 'Join Official Telegram Group', points: 30, url: 'https://t.me/axumgame', icon: '✈️' },
@@ -44,7 +39,6 @@ const defaultTasks = [
 
 defaultTasks.forEach(task => tasks.set(task.id, task));
 
-// JWT middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -58,34 +52,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Telegram login verification
-const verifyTelegramAuth = (data) => {
-  const { hash, ...authData } = data;
-
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    console.log("⚠️ WARNING: TELEGRAM_BOT_TOKEN missing — running in demo mode");
-    return true;
-  }
-
-  const secret = crypto
-    .createHash("sha256")
-    .update(process.env.TELEGRAM_BOT_TOKEN)
-    .digest();
-
-  const checkString = Object.keys(authData)
-    .sort()
-    .map(key => `${key}=${authData[key]}`)
-    .join("\n");
-
-  const hmac = crypto
-    .createHmac("sha256", secret)
-    .update(checkString)
-    .digest("hex");
-
-  return hmac === hash;
-};
-
-// ⭐ FIXED USER CREATION WITH FALLBACK USERNAME ⭐
 const getOrCreateUser = (telegramData) => {
   const userId = telegramData.id.toString();
 
@@ -93,13 +59,7 @@ const getOrCreateUser = (telegramData) => {
     users.set(userId, {
       id: userId,
       telegramId: telegramData.id,
-
-      // ⭐ ALWAYS PROVIDE A USERNAME ⭐
-      username: telegramData.username 
-             || `ANTZ${telegramData.id}`
-             || telegramData.first_name 
-             || "User",
-
+      username: `ANTZ${telegramData.id}`,
       first_name: telegramData.first_name || "User",
       photo_url: telegramData.photo_url || "",
       points: 0,
@@ -120,22 +80,13 @@ const getOrCreateUser = (telegramData) => {
   return users.get(userId);
 };
 
-// ROUTES -----------------------------------------------------
-
-// Health check
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "Axum backend is running" });
 });
 
-// Telegram login
 app.post("/api/auth/telegram", (req, res) => {
   try {
     const telegramData = req.body;
-
-    const isValid = verifyTelegramAuth(telegramData);
-    if (!isValid && process.env.NODE_ENV === "production") {
-      return res.status(401).json({ error: "Invalid Telegram authentication" });
-    }
 
     const user = getOrCreateUser(telegramData);
 
@@ -163,7 +114,6 @@ app.post("/api/auth/telegram", (req, res) => {
   }
 });
 
-// Get current user
 app.get("/api/auth/me", authenticateToken, (req, res) => {
   const user = users.get(req.user.userId);
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -179,7 +129,6 @@ app.get("/api/auth/me", authenticateToken, (req, res) => {
   });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`
   ⚜️ Axum Backend Server
