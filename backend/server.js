@@ -85,7 +85,7 @@ const verifyTelegramAuth = (data) => {
   return hmac === hash;
 };
 
-// Create or get user
+// ⭐ FIXED USER CREATION WITH FALLBACK USERNAME ⭐
 const getOrCreateUser = (telegramData) => {
   const userId = telegramData.id.toString();
 
@@ -93,7 +93,13 @@ const getOrCreateUser = (telegramData) => {
     users.set(userId, {
       id: userId,
       telegramId: telegramData.id,
-      username: telegramData.username || telegramData.first_name || "User",
+
+      // ⭐ ALWAYS PROVIDE A USERNAME ⭐
+      username: telegramData.username 
+             || `ANTZ${telegramData.id}`
+             || telegramData.first_name 
+             || "User",
+
       first_name: telegramData.first_name || "User",
       photo_url: telegramData.photo_url || "",
       points: 0,
@@ -172,10 +178,6 @@ app.get("/api/auth/me", authenticateToken, (req, res) => {
     badges: user.badges,
   });
 });
-
-// ------------------------------------------------------------
-// (All your other routes: tasks, leaderboard, rewards, etc.)
-// ------------------------------------------------------------
 
 // Start server
 app.listen(PORT, () => {
