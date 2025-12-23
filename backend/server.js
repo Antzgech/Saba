@@ -1,37 +1,28 @@
 const express = require('express');
 const cors = require('cors');
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Trust Railway proxy (important for HTTPS)
 app.set("trust proxy", 1);
 
-// CORS — allow Vercel + Telegram + Local Dev
 app.use(
   cors({
     origin: [
-      process.env.FRONTEND_URL,            // Your Vercel frontend
-      "https://telegram.org",              // Telegram widget
-      "https://web.telegram.org",          // Telegram browser
-      "https://t.me",                      // Telegram deep links
-      "http://localhost:5173"              // Local Vite dev
+      process.env.FRONTEND_URL || "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
 
-// Parse JSON
 app.use(express.json());
 
-// In-memory database (temporary)
+// In-memory storage
 const users = new Map();
 const tasks = new Map();
-const rewards = new Map();
 
 // Default tasks
 const defaultTasks = [
@@ -41,61 +32,18 @@ const defaultTasks = [
   { id: '4', type: 'tiktok', title: 'Follow on TikTok', points: 40, url: 'https://tiktok.com/@saba', icon: '🎵' },
   { id: '5', type: 'invite', title: 'Invite 5 Friends', points: 100, url: null, icon: '👥' }
 ];
-
 defaultTasks.forEach(task => tasks.set(task.id, task));
 
-// JWT middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.status(401).json({ error: 'Access token required' });
-
-  jwt.verify(token, process.env.JWT_SECRET || 'axum-secret-key', (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
-    req.user = user;
-    next();
-  });
-};
-
-// Telegram login verification
-const verifyTelegramAuth = (data) => {
-  const { hash, ...authData } = data;
-
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    console.log("⚠️ WARNING: TELEGRAM_BOT_TOKEN missing — running in demo mode");
-    return true;
-  }
-
-  const secret = crypto
-    .createHash("sha256")
-    .update(process.env.TELEGRAM_BOT_TOKEN)
-    .digest();
-
-  const checkString = Object.keys(authData)
-    .sort()
-    .map(key => `${key}=${authData[key]}`)
-    .join("\n");
-
-  const hmac = crypto
-    .createHmac("sha256", secret)
-    .update(checkString)
-    .digest("hex");
-
-  return hmac === hash;
-};
-
-// Create or get user
-const getOrCreateUser = (telegramData) => {
-  const userId = telegramData.id.toString();
-
-  if (!users.has(userId)) {
-    users.set(userId, {
-      id: userId,
-      telegramId: telegramData.id,
-      username: telegramData.username || telegramData.first_name || "User",
-      first_name: telegramData.first_name || "User",
-      photo_url: telegramData.photo_url || "",
+// Ensure dev user Antz exists
+const ensureDevUser = () => {
+  const id = "1";
+  if (!users.has(id)) {
+    users.set(id, {
+      id,
+      telegramId: 1,
+      username: "Antz",
+      first_name: "Antz",
+      photo_url: "",
       points: 0,
       currentLevel: 1,
       badges: [],
@@ -105,33 +53,39 @@ const getOrCreateUser = (telegramData) => {
       createdAt: new Date(),
       lastActive: new Date(),
     });
-  } else {
-    const user = users.get(userId);
-    user.lastActive = new Date();
-    users.set(userId, user);
   }
-
-  return users.get(userId);
+  return users.get(id);
 };
 
-// ROUTES -----------------------------------------------------
+// Auth middleware (dev-friendly)
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-// Health check
+  if (!token) {
+    req.user = { userId: "1" };
+    return next();
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'axum-secret-key', (err, user) => {
+    if (err) {
+      req.user = { userId: "1" };
+      return next();
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Routes
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "Axum backend is running" });
+  res.json({ status: "ok" });
 });
 
-// Telegram login
+// Dev auth endpoint: always return Antz
 app.post("/api/auth/telegram", (req, res) => {
   try {
-    const telegramData = req.body;
-
-    const isValid = verifyTelegramAuth(telegramData);
-    if (!isValid && process.env.NODE_ENV === "production") {
-      return res.status(401).json({ error: "Invalid Telegram authentication" });
-    }
-
-    const user = getOrCreateUser(telegramData);
+    const user = ensureDevUser();
 
     const token = jwt.sign(
       { userId: user.id, telegramId: user.telegramId },
@@ -157,11 +111,9 @@ app.post("/api/auth/telegram", (req, res) => {
   }
 });
 
-// Get current user
 app.get("/api/auth/me", authenticateToken, (req, res) => {
-  const user = users.get(req.user.userId);
-  if (!user) return res.status(404).json({ error: "User not found" });
-
+  const userId = req.user?.userId || "1";
+  const user = users.get(userId) || ensureDevUser();
   res.json({
     id: user.id,
     username: user.username,
@@ -173,20 +125,22 @@ app.get("/api/auth/me", authenticateToken, (req, res) => {
   });
 });
 
-// ------------------------------------------------------------
-// (All your other routes: tasks, leaderboard, rewards, etc.)
-// ------------------------------------------------------------
+app.get("/api/tasks", (req, res) => {
+  res.json(Array.from(tasks.values()));
+});
 
-// Start server
+app.post("/api/user/add-points", authenticateToken, (req, res) => {
+  const userId = req.user?.userId || "1";
+  const user = users.get(userId) || ensureDevUser();
+  const { points = 0 } = req.body;
+  user.points = (user.points || 0) + Number(points);
+  user.lastActive = new Date();
+  users.set(userId, user);
+  res.json({ success: true, points: user.points });
+});
+
 app.listen(PORT, () => {
-  console.log(`
-  ⚜️ Axum Backend Server
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  🚀 Running on port ${PORT}
-  🌍 Environment: ${process.env.NODE_ENV || "development"}
-  📡 Allowed Frontend: ${process.env.FRONTEND_URL}
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  `);
+  console.log(`Backend running on port ${PORT}`);
 });
 
 module.exports = app;
