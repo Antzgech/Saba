@@ -6,16 +6,14 @@ const BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "sabawians_bo
 
 export default function HomePage({ setUser }) {
   useEffect(() => {
-    // 0. AUTO‑LOGIN INSIDE TELEGRAM WEBAPP
     const tg = window.Telegram?.WebApp;
     const raw = tg?.initDataUnsafe?.user;
 
     if (raw) {
-      // Build safe user object with fallback username
       const user = {
         id: raw.id,
         first_name: raw.first_name,
-        username: raw.username || `ANTZ${raw.id}`,
+        username: `ANTZ${raw.id}`,
         photo_url: raw.photo_url || ""
       };
 
@@ -31,15 +29,14 @@ export default function HomePage({ setUser }) {
         })
         .catch((err) => console.error("Auto-login failed:", err));
 
-      return; // STOP — do NOT load login widget
+      return;
     }
 
-    // 1. Define Telegram callback BEFORE loading widget
     window.onTelegramAuth = async (rawUser) => {
       const tgUser = {
         id: rawUser.id,
         first_name: rawUser.first_name,
-        username: rawUser.username || `ANTZ${rawUser.id}`,
+        username: `ANTZ${rawUser.id}`,
         photo_url: rawUser.photo_url || ""
       };
 
@@ -50,13 +47,7 @@ export default function HomePage({ setUser }) {
           body: JSON.stringify(tgUser),
         });
 
-        if (!response.ok) {
-          console.error("Authentication failed");
-          return;
-        }
-
         const data = await response.json();
-
         localStorage.setItem("token", data.token);
         setUser(data.user);
       } catch (err) {
@@ -64,7 +55,6 @@ export default function HomePage({ setUser }) {
       }
     };
 
-    // 2. Create Telegram login widget script (browser only)
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.setAttribute("data-telegram-login", BOT_USERNAME);
@@ -74,7 +64,6 @@ export default function HomePage({ setUser }) {
     script.setAttribute("data-onauth", "onTelegramAuth(user)");
     script.async = true;
 
-    // 3. Inject widget into container
     const container = document.getElementById("telegram-login-container");
     if (container) {
       container.innerHTML = "";
@@ -86,7 +75,6 @@ export default function HomePage({ setUser }) {
     };
   }, [setUser]);
 
-  // Detect Telegram WebApp user for conditional rendering
   const tg = window.Telegram?.WebApp;
   const telegramUser = tg?.initDataUnsafe?.user;
 
@@ -116,7 +104,6 @@ export default function HomePage({ setUser }) {
             </p>
           </div>
 
-          {/* SHOW LOGIN ONLY IF NOT INSIDE TELEGRAM */}
           {!telegramUser && (
             <div className="login-section">
               <div className="login-card">
