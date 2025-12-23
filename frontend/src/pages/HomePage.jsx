@@ -6,6 +6,27 @@ const BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "sabawians_bo
 
 export default function HomePage({ setUser }) {
   useEffect(() => {
+    // 0. AUTO‑LOGIN INSIDE TELEGRAM WEBAPP
+    const tg = window.Telegram?.WebApp;
+    const telegramUser = tg?.initDataUnsafe?.user;
+
+    if (telegramUser) {
+      // Auto-login using Telegram WebApp injected user
+      fetch(`${API_URL}/api/auth/telegram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(telegramUser),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          localStorage.setItem("token", data.token);
+          setUser(data.user);
+        })
+        .catch((err) => console.error("Auto-login failed:", err));
+
+      return; // STOP — do NOT load login widget
+    }
+
     // 1. Define Telegram callback BEFORE loading widget
     window.onTelegramAuth = async (tgUser) => {
       try {
@@ -32,7 +53,7 @@ export default function HomePage({ setUser }) {
       }
     };
 
-    // 2. Create Telegram login widget script
+    // 2. Create Telegram login widget script (browser only)
     const script = document.createElement("script");
     script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.setAttribute("data-telegram-login", BOT_USERNAME);
@@ -54,6 +75,10 @@ export default function HomePage({ setUser }) {
       window.onTelegramAuth = null;
     };
   }, [setUser]);
+
+  // Detect Telegram WebApp user (for conditional rendering)
+  const tg = window.Telegram?.WebApp;
+  const telegramUser = tg?.initDataUnsafe?.user;
 
   return (
     <div className="home-page">
@@ -81,19 +106,22 @@ export default function HomePage({ setUser }) {
             </p>
           </div>
 
-          <div className="login-section">
-            <div className="login-card">
-              <h2 className="login-title">Begin Your Journey</h2>
-              <p className="login-text">
-                Login with your Telegram account to enter the realm of Axum
-              </p>
+          {/* SHOW LOGIN ONLY IF NOT INSIDE TELEGRAM */}
+          {!telegramUser && (
+            <div className="login-section">
+              <div className="login-card">
+                <h2 className="login-title">Begin Your Journey</h2>
+                <p className="login-text">
+                  Login with your Telegram account to enter the realm of Axum
+                </p>
 
-              <div
-                id="telegram-login-container"
-                className="telegram-login"
-              ></div>
+                <div
+                  id="telegram-login-container"
+                  className="telegram-login"
+                ></div>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="features-grid">
             <div className="feature-card">
