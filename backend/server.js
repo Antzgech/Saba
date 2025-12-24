@@ -34,7 +34,23 @@ function verifyTelegram(data) {
 
 // Routes
 app.get('/api/health', (req, res) => res.json({ status: 'ok', database: 'connected' }));
-
+// Add this route to your server.js
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const query = `
+      SELECT username, first_name, photo_url, points, level 
+      FROM users 
+      WHERE points > 0 
+      ORDER BY points DESC 
+      LIMIT 10;
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Leaderboard error:', err);
+    res.status(500).json({ error: 'Could not fetch leaderboard' });
+  }
+});
 app.post('/api/auth/telegram', async (req, res) => {
   try {
     const telegramData = req.body;
