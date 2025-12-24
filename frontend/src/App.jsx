@@ -4,16 +4,18 @@ import './App.css';
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     checkAuth();
+    loadTelegramWidget();
   }, []);
 
   async function checkAuth() {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        const res = await fetch('http://localhost:5000/api/user', {
+        const res = await fetch('https://saba-hbhv.vercel.app/api/user', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -29,7 +31,55 @@ function App() {
     setLoading(false);
   }
 
-  async function handleLogin() {
+  function loadTelegramWidget() {
+    // Define callback BEFORE loading script
+    window.onTelegramAuth = async (telegramUser) => {
+      console.log('✅ Telegram login received:', telegramUser);
+      
+      try {
+        const res = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(telegramUser)
+        });
+
+        console.log('Response status:', res.status);
+
+        if (res.ok) {
+          const data = await res.json();
+          console.log('✅ Login successful:', data);
+          localStorage.setItem('token', data.token);
+          setUser(data.user);
+        } else {
+          const errorData = await res.json();
+          console.error('❌ Login failed:', errorData);
+          setError('Login failed: ' + errorData.error);
+        }
+      } catch (err) {
+        console.error('❌ Network error:', err);
+        setError('Cannot connect to server');
+      }
+    };
+
+    // Load Telegram widget script
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.setAttribute('data-telegram-login', 'SABA_axumBot');
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    script.setAttribute('data-request-access', 'write');
+    script.async = true;
+
+    const container = document.getElementById('telegram-login');
+    if (container) {
+      container.innerHTML = '';
+      container.appendChild(script);
+    }
+  }
+
+  async function handleDemoLogin() {
+    console.log('🎮 Demo login clicked');
+    
     const demoUser = {
       id: Date.now(),
       first_name: 'Demo User',
@@ -38,7 +88,7 @@ function App() {
     };
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/telegram', {
+      const res = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(demoUser)
@@ -46,20 +96,24 @@ function App() {
 
       if (res.ok) {
         const data = await res.json();
+        console.log('✅ Demo login successful');
         localStorage.setItem('token', data.token);
         setUser(data.user);
       } else {
-        alert('Login failed');
+        const errorData = await res.json();
+        console.error('❌ Demo login failed:', errorData);
+        setError('Demo login failed: ' + errorData.error);
       }
     } catch (err) {
-      console.error('Login error:', err);
-      alert('Cannot connect to server');
+      console.error('❌ Network error:', err);
+      setError('Cannot connect to server');
     }
   }
 
   function handleLogout() {
     localStorage.removeItem('token');
     setUser(null);
+    setError(null);
   }
 
   if (loading) {
@@ -72,9 +126,31 @@ function App() {
         <div className="login-box">
           <h1>⚜️ AXUM</h1>
           <h2>Welcome to Queen Makeda's Quest</h2>
-          <button onClick={handleLogin} className="login-btn">
-            🎮 Login with Demo
-          </button>
+          
+          {error && (
+            <div className="error-box">
+              ⚠️ {error}
+            </div>
+          )}
+
+          <div className="login-methods">
+            <div className="telegram-section">
+              <p className="login-label">Login with Telegram:</p>
+              <div id="telegram-login"></div>
+            </div>
+
+            <div className="divider">
+              <span>OR</span>
+            </div>
+
+            <button onClick={handleDemoLogin} className="demo-btn">
+              🎮 Try Demo Mode
+            </button>
+          </div>
+
+          <p className="help-text">
+            Don't see Telegram button? Check console (F12) for errors.
+          </p>
         </div>
       </div>
     );
@@ -105,13 +181,13 @@ function App() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon">💎</div>
-          <div className="stat-value">{user.points}</div>
+          <div className="stat-value">{user.points || 0}</div>
           <div className="stat-label">Points</div>
         </div>
 
         <div className="stat-card">
           <div className="stat-icon">⚔️</div>
-          <div className="stat-value">{user.level}</div>
+          <div className="stat-value">{user.level || 1}</div>
           <div className="stat-label">Level</div>
         </div>
 
@@ -129,7 +205,7 @@ function App() {
       </div>
 
       <div className="info-section">
-        <h3>📊 Your Information</h3>
+        <h3>📊 Your Telegram Information</h3>
         <div className="info-grid">
           <div className="info-row">
             <span className="info-label">Telegram ID:</span>
@@ -144,10 +220,21 @@ function App() {
             <span className="info-value">@{user.username}</span>
           </div>
           <div className="info-row">
+            <span className="info-label">Photo URL:</span>
+            <span className="info-value">{user.photo_url || 'None'}</span>
+          </div>
+          <div className="info-row">
             <span className="info-label">Joined:</span>
-            <span className="info-value">{new Date(user.joinedAt).toLocaleDateString()}</span>
+            <span className="info-value">
+              {user.joinedAt ? new Date(user.joinedAt).toLocaleDateString() : 'Today'}
+            </span>
           </div>
         </div>
+      </div>
+
+      <div className="debug-section">
+        <h4>🔧 Debug Info</h4>
+        <pre>{JSON.stringify(user, null, 2)}</pre>
       </div>
     </div>
   );
