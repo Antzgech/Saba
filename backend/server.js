@@ -6,6 +6,19 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const express = require("express");
+const cors = require("cors");
+const authTelegram = require("./routes/authTelegram");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.use("/api/auth", authTelegram);
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Backend running...");
+});
 
 app.set("trust proxy", 1);
 
