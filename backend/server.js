@@ -108,24 +108,35 @@ app.get('/api/health', (req, res) => {
 });
 
 // Login with Telegram
-app.post('/api/auth/telegram', (req, res) => {
-  console.log('📥 Login request received');
-  console.log('Body:', req.body);
-  
+app.post('/api/auth/telegram', async (req, res) => {
   try {
     const telegramData = req.body;
-    
-    if (!telegramData.id || !telegramData.first_name) {
-      console.log('❌ Missing required fields');
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    // Verify hash
     if (!verifyTelegram(telegramData)) {
-      console.log('❌ Invalid Telegram auth');
-      return res.status(401).json({ error: 'Invalid Telegram authentication' });
+      return res.status(401).json({ error: 'Invalid authentication' });
     }
+
+    const { id, first_name, username, photo_url } = telegramData;
+
+    // Use SQL to insert new runner or update existing one
+    const query = `
+      INSERT INTO users (id, first_name, username, photo_url)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (id) DO UPDATE SET
+        first_name = EXCLUDED.first_name,
+        username = EXCLUDED.username,
+        photo_url = EXCLUDED.photo_url
+      RETURNING *;
+    `;
     
+    const result = await pool.query(query, [id, first_name, username, photo_url]);
+    const user = result.rows[0];
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user });
+  } catch (err) {
+    res.status(500).json({ error: 'Login failed: ' + err.message });
+  }
+});
     // Create or update user
     const userId = telegramData.id.toString();
     
