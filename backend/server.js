@@ -8,9 +8,12 @@ const PORT = process.env.PORT || 5000;
 
 // Configuration
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8471878133:AAHHxTHp4_gKm8bx3FkpljPc9vZH9YQT3UU';
-const JWT_SECRET = process.env.JWT_SECRET || 'axum-secret-key-12345';
+const JWT_SECRET = process.env.JWT_SECRET || 'Saba1212';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://saba-hbhv.vercel.app';
 
+require('dotenv').config(); // Load variables first
+const { pool, initDb } = require('./db');
+initDb(); // Initialize the database table
 // In-memory storage
 const users = new Map();
 
