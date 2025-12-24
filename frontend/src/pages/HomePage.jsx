@@ -1,91 +1,242 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
+import './HomePage.css';
 
-export default function HomePage() {
-  const [tgUser, setTgUser] = useState(null);
-  const [phone, setPhone] = useState(null);
+function HomePage({ setUser }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const tg = window.Telegram?.WebApp;
+    // Load Telegram Widget Script
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.setAttribute('data-telegram-login', 'SABA_axumBot');
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-radius', '8');
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    script.setAttribute('data-request-access', 'write');
+    script.async = true;
 
-    // Expand WebApp to full height
-    tg?.expand();
-
-    // Get Telegram user object
-    const user = tg?.initDataUnsafe?.user;
-
-    console.log("Telegram user:", user);
-
-    if (user) {
-      setTgUser(user);
+    const container = document.getElementById('telegram-login-container');
+    if (container) {
+      container.innerHTML = ''; // Clear any existing content
+      container.appendChild(script);
     }
 
-    // Listen for contact (phone number)
-    tg?.onEvent("contactRequested", (data) => {
-      console.log("Phone received:", data);
-      setPhone(data?.phone_number || null);
-    });
-  }, []);
+    // Define global callback for Telegram
+    window.onTelegramAuth = async (telegramUser) => {
+      console.log('Telegram auth received:', telegramUser);
+      setLoading(true);
+      setError(null);
 
-  const requestPhone = () => {
-    const tg = window.Telegram?.WebApp;
-    tg?.requestContact();
+      try {
+        // Send to your backend
+        const response = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(telegramUser),
+        });
+
+        console.log('Backend response status:', response.status);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Backend response data:', data);
+          
+          // Store token
+          localStorage.setItem('axum_token', data.token);
+          
+          // Set user in app state
+          setUser(data.user);
+        } else {
+          const errorData = await response.json();
+          console.error('Backend error:', errorData);
+          setError(errorData.error || 'Authentication failed');
+        }
+      } catch (err) {
+        console.error('Auth error:', err);
+        setError('Failed to connect to server. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return () => {
+      window.onTelegramAuth = null;
+    };
+  }, [setUser]);
+
+  // Demo login for testing without Telegram
+  const handleDemoLogin = async () => {
+    setLoading(true);
+    setError(null);
+
+    const demoUser = {
+      id: Math.floor(Math.random() * 1000000),
+      first_name: 'Demo User',
+      username: 'demo_user_' + Date.now(),
+      auth_date: Math.floor(Date.now() / 1000),
+      hash: 'demo_hash'
+    };
+
+    try {
+      const response = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(demoUser),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('axum_token', data.token);
+        setUser(data.user);
+      } else {
+        // Even if backend rejects, create local session
+        localStorage.setItem('axum_token', 'demo_token_' + demoUser.id);
+        setUser({
+          id: demoUser.id.toString(),
+          username: demoUser.username,
+          first_name: demoUser.first_name,
+          points: 0,
+          currentLevel: 1,
+          badges: []
+        });
+      }
+    } catch (err) {
+      console.error('Demo login error:', err);
+      // Offline mode - just set demo user
+      localStorage.setItem('axum_token', 'demo_token_' + demoUser.id);
+      setUser({
+        id: demoUser.id.toString(),
+        username: demoUser.username,
+        first_name: demoUser.first_name,
+        points: 0,
+        currentLevel: 1,
+        badges: []
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Telegram User Info</h1>
+    <div className="home-page">
+      <div className="home-hero">
+        <div className="hero-background"></div>
+        
+        <div className="hero-content">
+          <div className="hero-icon-large">⚜️</div>
+          
+          <h1 className="hero-title">
+            <span className="title-line">WELCOME TO</span>
+            <span className="title-main">AXUM</span>
+          </h1>
+          
+          <p className="hero-subtitle">
+            Join Queen Makeda's quest to find the wisest and most courageous
+          </p>
+          
+          <div className="hero-description">
+            <p>
+              In the ancient land of Saba, Queen Makeda seeks worthy companions 
+              for her legendary journey to Jerusalem. Prove your wisdom and courage 
+              through challenges, earn divine rewards, and compete for the honor 
+              of joining her quest.
+            </p>
+          </div>
 
-      {!tgUser && (
-        <p style={{ color: "red" }}>
-          No Telegram user detected — open this WebApp inside Telegram.
-        </p>
-      )}
+          <div className="login-section">
+            <div className="login-card">
+              <h2 className="login-title">Begin Your Journey</h2>
+              <p className="login-text">
+                Connect your Telegram account to enter the realm of Axum
+              </p>
+              
+              {error && (
+                <div className="error-message">
+                  <p>⚠️ {error}</p>
+                </div>
+              )}
 
-      {tgUser && (
-        <div style={{ marginTop: 20 }}>
-          <p><b>ID:</b> {tgUser.id}</p>
-          <p><b>Username:</b> {tgUser.username}</p>
-          <p><b>First Name:</b> {tgUser.first_name}</p>
-          <p><b>Last Name:</b> {tgUser.last_name}</p>
-          <p><b>Language:</b> {tgUser.language_code}</p>
+              {loading ? (
+                <div className="loading-spinner-small">
+                  <div className="spinner"></div>
+                  <p>Authenticating...</p>
+                </div>
+              ) : (
+                <>
+                  <div id="telegram-login-container" className="telegram-login"></div>
+                  
+                  <div className="login-divider">
+                    <span>OR</span>
+                  </div>
+                  
+                  <button 
+                    className="btn btn-secondary demo-login-btn"
+                    onClick={handleDemoLogin}
+                  >
+                    🎮 Try Demo Mode
+                  </button>
+                  <p className="demo-notice">
+                    <small>Demo mode lets you explore without Telegram</small>
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
 
-          {tgUser.photo_url && (
-            <img
-              src={tgUser.photo_url}
-              alt="Profile"
-              style={{
-                width: 120,
-                height: 120,
-                borderRadius: "50%",
-                marginTop: 20
-              }}
-            />
-          )}
+          <div className="features-grid">
+            <div className="feature-card">
+              <span className="feature-icon">🎮</span>
+              <h3 className="feature-title">6 Epic Levels</h3>
+              <p className="feature-text">
+                Progress through challenges that test your dedication and skill
+              </p>
+            </div>
 
-          <hr style={{ margin: "30px 0" }} />
+            <div className="feature-card">
+              <span className="feature-icon">👑</span>
+              <h3 className="feature-title">Compete & Rise</h3>
+              <p className="feature-text">
+                Climb the leaderboard and become one of the chosen 30 finalists
+              </p>
+            </div>
 
-          <h2>Phone Number</h2>
+            <div className="feature-card">
+              <span className="feature-icon">💎</span>
+              <h3 className="feature-title">Win Rewards</h3>
+              <p className="feature-text">
+                Earn cash, points, badges, and exclusive sponsor benefits
+              </p>
+            </div>
 
-          {phone ? (
-            <p><b>{phone}</b></p>
-          ) : (
-            <button
-              onClick={requestPhone}
-              style={{
-                padding: "10px 20px",
-                background: "#0088cc",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                cursor: "pointer",
-                fontSize: 16
-              }}
-            >
-              Share Phone Number
-            </button>
-          )}
+            <div className="feature-card">
+              <span className="feature-icon">📜</span>
+              <h3 className="feature-title">Complete Tasks</h3>
+              <p className="feature-text">
+                Subscribe, follow, share, and invite to gather points
+              </p>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+
+      <div className="sponsors-preview">
+        <div className="sponsors-container">
+          <h2 className="sponsors-title">Supported By</h2>
+          <div className="sponsors-logos">
+            <div className="sponsor-placeholder">SABA Company</div>
+            <div className="sponsor-placeholder">Partner 1</div>
+            <div className="sponsor-placeholder">Partner 2</div>
+            <div className="sponsor-placeholder">Partner 3</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+
+export default HomePage;
