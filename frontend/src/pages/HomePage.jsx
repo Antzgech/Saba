@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import Antz from "../lib/Antz";
+console.log("Telegram:", window.Telegram);
+console.log("initDataUnsafe:", window.Telegram?.WebApp?.initDataUnsafe);
+console.log("User:", window.Telegram?.WebApp?.initDataUnsafe?.user);
 
 export default function HomePage({ setUser }) {
   const [tgUser, setTgUser] = useState(null);
