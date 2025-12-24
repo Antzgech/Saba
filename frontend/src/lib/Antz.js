@@ -1,10 +1,9 @@
+// This file will be overwritten at runtime with Telegram user data
 const Antz = {
-  id: "1",
-  username: "Antz",
-  first_name: "Antz",
-  points: 0,
-  completedTasks: [],
-  completedLevels: []
+  id: null,
+  username: null,
+  first_name: null,
+  photo_url: null
 };
 
 export default Antz;
