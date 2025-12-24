@@ -156,3 +156,12 @@ bot.onText(/\/referral/, async (msg) => {
 });
 
 console.log("🤖 Bot is running...");
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err);
+});
+
+
