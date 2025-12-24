@@ -84,16 +84,14 @@ function authenticateToken(req, res, next) {
 // ROUTES
 
 // Root route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Axum Backend API',
-    status: 'running',
-    endpoints: {
-      health: '/api/health',
-      login: 'POST /api/auth/telegram',
-      user: 'GET /api/user'
-    }
-  });
+app.get('/api/user', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.userId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Health check
