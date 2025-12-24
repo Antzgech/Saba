@@ -108,6 +108,14 @@ export default function HomePage({ setUser }) {
     </div>
   );
 }
+.tasks-container { margin-top: 2rem; text-align: left; }
+.tasks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+.task-card { background: rgba(26,26,26,0.8); padding: 1rem; border-radius: 12px; border: 1px solid rgba(212,175,55,0.12); display:flex; gap:1rem; align-items:center; }
+.task-icon { font-size: 2rem; }
+.task-body h3 { margin:0 0 0.5rem 0; color:var(--gold-primary); }
+.task-actions button { padding: 0.5rem 1rem; border-radius:8px; border:none; background:var(--gold-primary); color:#111; cursor:pointer; }
+.task-actions button[disabled] { opacity:0.5; cursor:default; }
+
 
 
 
