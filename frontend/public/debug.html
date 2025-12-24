@@ -6,8 +6,15 @@
     <pre id="output">Loading...</pre>
 
     <script>
-      const tg = window.Telegram?.WebApp;
+  
+const tg = window.Telegram.WebApp;
 
+fetch(`${BACKEND_URL}/api/auth/telegram`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(tg.initDataUnsafe)
+});
+    const tg = window.Telegram?.WebApp;
       const data = {
         telegram: tg,
         initData: tg?.initData,
