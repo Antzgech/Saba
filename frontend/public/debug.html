@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <h1>Telegram WebApp Debug</h1>
+
+    <pre id="output">Loading...</pre>
+
+    <script>
+      const tg = window.Telegram?.WebApp;
+
+      const data = {
+        telegram: tg,
+        initData: tg?.initData,
+        initDataUnsafe: tg?.initDataUnsafe,
+        user: tg?.initDataUnsafe?.user
+      };
+
+      document.getElementById("output").innerText = JSON.stringify(data, null, 2);
+
+      console.log("DEBUG:", data);
+    </script>
+  </body>
+</html>
