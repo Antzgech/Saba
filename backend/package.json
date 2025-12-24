@@ -1,5 +1,5 @@
 {
-  "name": "axum-minimal-backend",
+  "name": "axum-backend",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
@@ -13,5 +13,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
