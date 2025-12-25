@@ -6,52 +6,43 @@ function HomePage({ setUser }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Load Telegram Widget Script
+    // Load Telegram Login Widget Script
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
     script.setAttribute('data-telegram-login', 'SABA_axumBot');
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-radius', '8');
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
     script.setAttribute('data-request-access', 'write');
+
+    // Correct callback syntax
+    script.setAttribute('data-onauth', 'window.onTelegramAuth(user)');
     script.async = true;
 
     const container = document.getElementById('telegram-login-container');
     if (container) {
-      container.innerHTML = ''; // Clear any existing content
+      container.innerHTML = '';
       container.appendChild(script);
     }
 
-    // Define global callback for Telegram
+    // Define global callback
     window.onTelegramAuth = async (telegramUser) => {
       console.log('Telegram auth received:', telegramUser);
       setLoading(true);
       setError(null);
 
       try {
-        // Send to your backend
         const response = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(telegramUser),
         });
 
-        console.log('Backend response status:', response.status);
-
         if (response.ok) {
           const data = await response.json();
-          console.log('Backend response data:', data);
-          
-          // Store token
           localStorage.setItem('axum_token', data.token);
-          
-          // Set user in app state
           setUser(data.user);
         } else {
           const errorData = await response.json();
-          console.error('Backend error:', errorData);
           setError(errorData.error || 'Authentication failed');
         }
       } catch (err) {
@@ -83,9 +74,7 @@ function HomePage({ setUser }) {
     try {
       const response = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(demoUser),
       });
 
@@ -94,7 +83,7 @@ function HomePage({ setUser }) {
         localStorage.setItem('axum_token', data.token);
         setUser(data.user);
       } else {
-        // Even if backend rejects, create local session
+        // Local fallback session
         localStorage.setItem('axum_token', 'demo_token_' + demoUser.id);
         setUser({
           id: demoUser.id.toString(),
@@ -107,7 +96,6 @@ function HomePage({ setUser }) {
       }
     } catch (err) {
       console.error('Demo login error:', err);
-      // Offline mode - just set demo user
       localStorage.setItem('axum_token', 'demo_token_' + demoUser.id);
       setUser({
         id: demoUser.id.toString(),
@@ -126,24 +114,24 @@ function HomePage({ setUser }) {
     <div className="home-page">
       <div className="home-hero">
         <div className="hero-background"></div>
-        
+
         <div className="hero-content">
           <div className="hero-icon-large">⚜️</div>
-          
+
           <h1 className="hero-title">
             <span className="title-line">WELCOME TO</span>
             <span className="title-main">AXUM</span>
           </h1>
-          
+
           <p className="hero-subtitle">
             Join Queen Makeda's quest to find the wisest and most courageous
           </p>
-          
+
           <div className="hero-description">
             <p>
-              In the ancient land of Saba, Queen Makeda seeks worthy companions 
-              for her legendary journey to Jerusalem. Prove your wisdom and courage 
-              through challenges, earn divine rewards, and compete for the honor 
+              In the ancient land of Saba, Queen Makeda seeks worthy companions
+              for her legendary journey to Jerusalem. Prove your wisdom and courage
+              through challenges, earn divine rewards, and compete for the honor
               of joining her quest.
             </p>
           </div>
@@ -154,7 +142,7 @@ function HomePage({ setUser }) {
               <p className="login-text">
                 Connect your Telegram account to enter the realm of Axum
               </p>
-              
+
               {error && (
                 <div className="error-message">
                   <p>⚠️ {error}</p>
@@ -169,12 +157,12 @@ function HomePage({ setUser }) {
               ) : (
                 <>
                   <div id="telegram-login-container" className="telegram-login"></div>
-                  
+
                   <div className="login-divider">
                     <span>OR</span>
                   </div>
-                  
-                  <button 
+
+                  <button
                     className="btn btn-secondary demo-login-btn"
                     onClick={handleDemoLogin}
                   >
