@@ -1,113 +1,69 @@
-import React, { useEffect, useState } from 'react';
-import './HomePage.css';
+import React, { useEffect, useState } from "react";
+import "./HomePage.css";
 
 function HomePage({ setUser }) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Load Telegram Login Widget Script
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', 'SABA_axumBot');
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '8');
-    script.setAttribute('data-request-access', 'write');
+    const tg = window.Telegram?.WebApp;
 
-    // Correct callback syntax
-    script.setAttribute('data-onauth', 'window.onTelegramAuth(user)');
-    script.async = true;
+    // 1. Check if Telegram WebApp exists
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      const telegramUser = tg.initDataUnsafe.user;
 
-    const container = document.getElementById('telegram-login-container');
-    if (container) {
-      container.innerHTML = '';
-      container.appendChild(script);
+      console.log("Telegram WebApp user detected:", telegramUser);
+
+      authenticateTelegramUser(telegramUser);
+    } else {
+      console.log("Not inside Telegram WebApp — showing normal homepage");
+      setLoading(false);
     }
+  }, []);
 
-    // Define global callback
-    window.onTelegramAuth = async (telegramUser) => {
-      console.log('Telegram auth received:', telegramUser);
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(telegramUser),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          localStorage.setItem('axum_token', data.token);
-          setUser(data.user);
-        } else {
-          const errorData = await response.json();
-          setError(errorData.error || 'Authentication failed');
-        }
-      } catch (err) {
-        console.error('Auth error:', err);
-        setError('Failed to connect to server. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    return () => {
-      window.onTelegramAuth = null;
-    };
-  }, [setUser]);
-
-  // Demo login for testing without Telegram
-  const handleDemoLogin = async () => {
+  // 2. Send Telegram user to backend
+  const authenticateTelegramUser = async (telegramUser) => {
     setLoading(true);
     setError(null);
 
-    const demoUser = {
-      id: Math.floor(Math.random() * 1000000),
-      first_name: 'Demo User',
-      username: 'demo_user_' + Date.now(),
-      auth_date: Math.floor(Date.now() / 1000),
-      hash: 'demo_hash'
-    };
-
     try {
-      const response = await fetch('https://saba-hbhv.vercel.app/api/auth/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(demoUser),
-      });
+      const response = await fetch(
+        "https://saba-hbhv.vercel.app/api/auth/telegram",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(telegramUser),
+        }
+      );
 
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem('axum_token', data.token);
+        localStorage.setItem("axum_token", data.token);
         setUser(data.user);
       } else {
-        // Local fallback session
-        localStorage.setItem('axum_token', 'demo_token_' + demoUser.id);
-        setUser({
-          id: demoUser.id.toString(),
-          username: demoUser.username,
-          first_name: demoUser.first_name,
-          points: 0,
-          currentLevel: 1,
-          badges: []
-        });
+        const errorData = await response.json();
+        setError(errorData.error || "Authentication failed");
       }
     } catch (err) {
-      console.error('Demo login error:', err);
-      localStorage.setItem('axum_token', 'demo_token_' + demoUser.id);
-      setUser({
-        id: demoUser.id.toString(),
-        username: demoUser.username,
-        first_name: demoUser.first_name,
-        points: 0,
-        currentLevel: 1,
-        badges: []
-      });
+      console.error("Auth error:", err);
+      setError("Failed to connect to server.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // 3. Demo login fallback
+  const handleDemoLogin = () => {
+    const demoUser = {
+      id: "demo-" + Date.now(),
+      username: "DemoUser",
+      first_name: "Demo",
+      points: 0,
+      currentLevel: 1,
+    };
+
+    localStorage.setItem("axum_token", "demo-token");
+    setUser(demoUser);
   };
 
   return (
@@ -130,33 +86,30 @@ function HomePage({ setUser }) {
           <div className="hero-description">
             <p>
               In the ancient land of Saba, Queen Makeda seeks worthy companions
-              for her legendary journey to Jerusalem. Prove your wisdom and courage
-              through challenges, earn divine rewards, and compete for the honor
-              of joining her quest.
+              for her legendary journey to Jerusalem. Prove your wisdom and
+              courage through challenges, earn divine rewards, and compete for
+              the honor of joining her quest.
             </p>
           </div>
 
           <div className="login-section">
             <div className="login-card">
               <h2 className="login-title">Begin Your Journey</h2>
-              <p className="login-text">
-                Connect your Telegram account to enter the realm of Axum
-              </p>
 
-              {error && (
-                <div className="error-message">
-                  <p>⚠️ {error}</p>
-                </div>
-              )}
-
-              {loading ? (
+              {loading && (
                 <div className="loading-spinner-small">
                   <div className="spinner"></div>
                   <p>Authenticating...</p>
                 </div>
-              ) : (
+              )}
+
+              {!loading && (
                 <>
-                  <div id="telegram-login-container" className="telegram-login"></div>
+                  {error && (
+                    <div className="error-message">
+                      <p>⚠️ {error}</p>
+                    </div>
+                  )}
 
                   <div className="login-divider">
                     <span>OR</span>
@@ -168,6 +121,7 @@ function HomePage({ setUser }) {
                   >
                     🎮 Try Demo Mode
                   </button>
+
                   <p className="demo-notice">
                     <small>Demo mode lets you explore without Telegram</small>
                   </p>
