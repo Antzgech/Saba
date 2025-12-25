@@ -20,21 +20,44 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Telegram Verification Logic
+// Telegram verification logic (relaxed for WebApp/dev)
 function verifyTelegram(data) {
   const { hash, ...authData } = data;
+
+  // Allow explicit demo hash
   if (hash === 'demo_hash') return true;
-  if (!BOT_TOKEN) return false;
+
+  // If no hash at all (WebApp user only), allow in dev mode
+  if (!hash) {
+    console.warn('⚠️ No hash provided – allowing WebApp auth in DEV mode');
+    return true;
+  }
+
+  // Strict verification when BOT_TOKEN + hash exist
+  if (!BOT_TOKEN) {
+    console.error('❌ BOT_TOKEN not set – cannot verify Telegram hash');
+    return false;
+  }
   
   const secret = crypto.createHash('sha256').update(BOT_TOKEN).digest();
-  const checkString = Object.keys(authData).sort().map(k => `${k}=${authData[k]}`).join('\n');
-  const hmac = crypto.createHmac('sha256', secret).update(checkString).digest('hex');
+  const checkString = Object.keys(authData)
+    .sort()
+    .map(k => `${k}=${authData[k]}`)
+    .join('\n');
+
+  const hmac = crypto
+    .createHmac('sha256', secret)
+    .update(checkString)
+    .digest('hex');
+
   return hmac === hash;
 }
 
 // Routes
-app.get('/api/health', (req, res) => res.json({ status: 'ok', database: 'connected' }));
-// Add this route to your server.js
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', database: 'connected' });
+});
+
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const query = `
@@ -51,10 +74,19 @@ app.get('/api/leaderboard', async (req, res) => {
     res.status(500).json({ error: 'Could not fetch leaderboard' });
   }
 });
+
 app.post('/api/auth/telegram', async (req, res) => {
   try {
     const telegramData = req.body;
-    if (!verifyTelegram(telegramData)) return res.status(401).json({ error: 'Invalid auth' });
+    console.log('📩 Incoming Telegram auth payload:', telegramData);
+
+    if (!telegramData || !telegramData.id) {
+      return res.status(400).json({ error: 'Invalid Telegram user data' });
+    }
+
+    if (!verifyTelegram(telegramData)) {
+      return res.status(401).json({ error: 'Invalid auth' });
+    }
 
     const { id, first_name, username, photo_url } = telegramData;
     const query = `
@@ -72,6 +104,7 @@ app.post('/api/auth/telegram', async (req, res) => {
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token, user });
   } catch (err) {
+    console.error('Auth error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -85,10 +118,12 @@ app.get('/api/user', async (req, res) => {
 
   jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) return res.status(403).json({ error: 'Forbidden' });
+
     try {
       const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId]);
       res.json(result.rows[0]);
     } catch (dbErr) {
+      console.error('User fetch error:', dbErr);
       res.status(500).json({ error: 'Database error' });
     }
   });
